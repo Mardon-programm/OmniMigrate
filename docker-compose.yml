@@ -1,0 +1,100 @@
+name: omnimigrate
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: omnimigrate-postgres
+    environment:
+      POSTGRES_USER: omnimigrate
+      POSTGRES_PASSWORD: omnimigrate
+      POSTGRES_DB: omnimigrate
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omnimigrate -d omnimigrate"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - omnimigrate-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: omnimigrate-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - omnimigrate-net
+
+  backend:
+    build: ./backend
+    container_name: omnimigrate-backend
+    env_file:
+      - path: backend/.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://omnimigrate:omnimigrate@postgres:5432/omnimigrate
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
+    ports:
+      - "8000:8000"
+    volumes:
+      - workspace_data:/data
+    networks:
+      - omnimigrate-net
+
+  worker:
+    build: ./backend
+    container_name: omnimigrate-worker
+    env_file:
+      - path: backend/.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://omnimigrate:omnimigrate@postgres:5432/omnimigrate
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["arq", "app.core.worker.WorkerSettings"]
+    volumes:
+      - workspace_data:/data
+    networks:
+      - omnimigrate-net
+
+  frontend:
+    build: ./frontend
+    container_name: omnimigrate-frontend
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks:
+      - omnimigrate-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  workspace_data:
+
+networks:
+  omnimigrate-net:
+    driver: bridge
