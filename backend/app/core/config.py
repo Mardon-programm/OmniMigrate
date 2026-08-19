@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import List, Literal
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 24  # 24 hours
     refresh_token_expire_minutes: int = 60 * 24 * 7  # 7 days
     bcrypt_rounds: int = 12
-    allowed_origins: List[str] = Field(
+    allowed_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://localhost:3000"]
     )
 
@@ -38,9 +38,7 @@ class Settings(BaseSettings):
     rate_limit_window_seconds: int = 60
 
     # --- Database ---
-    database_url: str = (
-        "postgresql+asyncpg://omnimigrate:omnimigrate@postgres:5432/omnimigrate"
-    )
+    database_url: str = "postgresql+asyncpg://omnimigrate:omnimigrate@postgres:5432/omnimigrate"
 
     # --- Redis ---
     redis_url: str = "redis://redis:6379/0"
@@ -76,7 +74,7 @@ class Settings(BaseSettings):
         return self.database_url.replace("+asyncpg", "")
 
     @property
-    def cors_origins(self) -> List[str]:
+    def cors_origins(self) -> list[str]:
         return list(self.allowed_origins)
 
 

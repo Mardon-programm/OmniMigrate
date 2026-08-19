@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
 from app.core.config import settings
-from app.core.deps import CurrentUser, DbSession, require_roles
+from app.core.deps import CurrentUser, DbSession
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -65,9 +65,7 @@ async def login(payload: LoginRequest, session: DbSession) -> TokenResponse:
             detail="Incorrect email or password.",
         )
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled."
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled.")
 
     return TokenResponse(
         access_token=create_access_token(user.id, user.role.value),
@@ -85,7 +83,7 @@ async def refresh(payload: RefreshRequest, session: DbSession) -> TokenResponse:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token.",
-        )
+        ) from None
     user = await session.get(User, int(token_payload["sub"]))
     if user is None or not user.is_active:
         raise HTTPException(
@@ -101,6 +99,4 @@ async def refresh(payload: RefreshRequest, session: DbSession) -> TokenResponse:
 @router.get("/me", response_model=UserInfo)
 async def me(user: CurrentUser) -> UserInfo:
     """Return the currently authenticated user."""
-    return UserInfo(
-        id=user.id, email=user.email, full_name=user.full_name, role=user.role
-    )
+    return UserInfo(id=user.id, email=user.email, full_name=user.full_name, role=user.role)

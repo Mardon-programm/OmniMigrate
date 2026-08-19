@@ -5,16 +5,17 @@ Revises:
 Create Date: 2026-01-01 00:00:00.000000
 
 """
-from typing import Sequence, Union
+
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0001"
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 user_role = sa.Enum("admin", "client", "engineer", name="user_role")
@@ -59,12 +60,8 @@ def upgrade() -> None:
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("repo_url", sa.String(512), nullable=True),
-        sa.Column(
-            "source_language", sa.String(64), nullable=False, server_default="python"
-        ),
-        sa.Column(
-            "target_stack", sa.String(64), nullable=False, server_default="python-3.12"
-        ),
+        sa.Column("source_language", sa.String(64), nullable=False, server_default="python"),
+        sa.Column("target_stack", sa.String(64), nullable=False, server_default="python-3.12"),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

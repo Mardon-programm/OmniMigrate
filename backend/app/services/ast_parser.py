@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable
 
 import libcst as cst
 import libcst.helpers as cst_helpers
@@ -124,9 +124,16 @@ class _DeprecationVisitor(cst.CSTVisitor):
         suggestion: str | None = None,
     ) -> None:
         position = self.get_metadata(cst_meta.PositionProvider, node)
-        line = position.start.line if position else 0
+        start = getattr(position, "start", None)
+        line = start.line if start else 0
         self.findings.append(
-            ASTFinding(line=line, severity=severity, category=category, message=message, suggestion=suggestion)
+            ASTFinding(
+                line=line,
+                severity=severity,
+                category=category,
+                message=message,
+                suggestion=suggestion,
+            )
         )
 
     # --- Imports -------------------------------------------------------
@@ -144,7 +151,7 @@ class _DeprecationVisitor(cst.CSTVisitor):
                 )
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
-        if node.module is None:
+        if node.module is None or isinstance(node.names, cst.ImportStar):
             return
         module_name = cst_helpers.get_full_name_for_node(node.module) or ""
         if module_name == "collections":
@@ -156,7 +163,7 @@ class _DeprecationVisitor(cst.CSTVisitor):
                         "warning",
                         "deprecated-import",
                         f"'{imported}' is no longer importable from 'collections'.",
-                        f"Import from 'collections.abc' instead: from collections.abc import {imported}",
+                        f"Import from 'collections.abc' instead: {imported}",
                     )
         elif module_name == "typing":
             for alias in node.names:
@@ -225,13 +232,37 @@ class _DeprecationVisitor(cst.CSTVisitor):
         if isinstance(func, cst.Attribute) and func_name:
             suffix = "." + func.attr.value
             if suffix == ".iteritems":
-                self._add(node, "critical", "python2-syntax", "iteritems() does not exist in Python 3.", "Use .items()")
+                self._add(
+                    node,
+                    "critical",
+                    "python2-syntax",
+                    "iteritems() does not exist in Python 3.",
+                    "Use .items()",
+                )
             elif suffix == ".iterkeys":
-                self._add(node, "critical", "python2-syntax", "iterkeys() does not exist in Python 3.", "Use .keys()")
+                self._add(
+                    node,
+                    "critical",
+                    "python2-syntax",
+                    "iterkeys() does not exist in Python 3.",
+                    "Use .keys()",
+                )
             elif suffix == ".itervalues":
-                self._add(node, "critical", "python2-syntax", "itervalues() does not exist in Python 3.", "Use .values()")
+                self._add(
+                    node,
+                    "critical",
+                    "python2-syntax",
+                    "itervalues() does not exist in Python 3.",
+                    "Use .values()",
+                )
             elif suffix == ".has_key":
-                self._add(node, "critical", "python2-syntax", "dict.has_key() was removed.", "Use `key in mapping`.")
+                self._add(
+                    node,
+                    "critical",
+                    "python2-syntax",
+                    "dict.has_key() was removed.",
+                    "Use `key in mapping`.",
+                )
             elif suffix in (".system", ".popen", ".Popen"):
                 self._add(
                     node,
@@ -257,27 +288,28 @@ class _DeprecationVisitor(cst.CSTVisitor):
     def visit_Comparison(self, node: cst.Comparison) -> None:
         for target in node.comparisons:
             op = target.operator
-            if isinstance(op, (cst.Equal, cst.NotEqual)) and isinstance(
-                target.comparator, cst.Name
+            if (
+                isinstance(op, cst.Equal | cst.NotEqual)
+                and isinstance(target.comparator, cst.Name)
+                and target.comparator.value == "None"
             ):
-                if target.comparator.value == "None":
-                    self._add(
-                        node,
-                        "warning",
-                        "code-style",
-                        "Comparison to None should use identity operators.",
-                        f"Use '{op.__class__.__name__.replace('Equal', '')} is None' instead of '{op.__class__.__name__.replace('Not', '')}== None'.",
-                    )
+                self._add(
+                    node,
+                    "warning",
+                    "code-style",
+                    "Comparison to None should use identity operators.",
+                    "Use 'is None' or 'is not None' instead of '== None' or '!= None'.",
+                )
 
     # --- Assignments of secrets ----------------------------------------
     def visit_Assign(self, node: cst.Assign) -> None:
         value = node.value
-        if isinstance(value, (cst.SimpleString, cst.ConcatenatedString)):
+        if isinstance(value, cst.SimpleString | cst.ConcatenatedString):
             for target in node.targets:
                 expr = target.target
                 names = (
                     cst_helpers.get_full_name_for_node(expr)
-                    if not isinstance(expr, (cst.Tuple, cst.List))
+                    if not isinstance(expr, cst.Tuple | cst.List)
                     else None
                 )
                 if names and re.search(
@@ -296,10 +328,9 @@ class _DeprecationVisitor(cst.CSTVisitor):
     # --- Potential N+1 query patterns ---------------------------------
     def visit_For(self, node: cst.For) -> None:
         for body_node in node.body.body:
-            if isinstance(body_node, (cst.SimpleStatementLine, cst.FunctionDef)):
+            if isinstance(body_node, cst.SimpleStatementLine | cst.FunctionDef):
                 continue
         # Lightweight heuristic: SQLAlchemy-style .all()/.first() calls inside a loop.
-        target = node.target
         iterable = node.iter
         if isinstance(iterable, cst.Call):
             func_name = cst_helpers.get_full_name_for_node(iterable.func) or ""
@@ -330,9 +361,7 @@ def analyze_python_source(source: str) -> ParseResult:
     except cst.ParserSyntaxError as exc:
         message = str(exc)
         suggestion = None
-        if "invalid syntax" in message and any(
-            kw in message for kw in ("print", "except", "exec")
-        ):
+        if "invalid syntax" in message and any(kw in message for kw in ("print", "except", "exec")):
             suggestion = (
                 "Source appears to target Python 2 syntax; convert print statements, "
                 "except clauses and exec usage to Python 3 first."
@@ -395,7 +424,9 @@ def _analyze_generic(source: str, lang: str) -> ParseResult:
                 "suggestion": "Resolve or remove TODO markers.",
             }
         )
-    if re.search(r"(password|secret|api_?key|token)\s*=\s*['\"][^'\"]+['\"]", source, re.IGNORECASE):
+    if re.search(
+        r"(password|secret|api_?key|token)\s*=\s*['\"][^'\"]+['\"]", source, re.IGNORECASE
+    ):
         findings.append(
             {
                 "line": 0,
@@ -413,7 +444,9 @@ def findings_to_text(findings: Iterable[dict]) -> str:
     lines = []
     for f in findings:
         loc = f"L{f.get('line') or '?'}"
-        lines.append(f"- [{loc} / {f.get('severity', 'info')}] {f.get('category')}: {f.get('message')}")
+        lines.append(
+            f"- [{loc} / {f.get('severity', 'info')}] {f.get('category')}: {f.get('message')}"
+        )
         if f.get("suggestion"):
             lines.append(f"    -> {f['suggestion']}")
     return "\n".join(lines) if lines else "No findings detected."

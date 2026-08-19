@@ -17,6 +17,10 @@ dist/
 .vite/
 npm-debug.log*
 
+# Coverage
+coverage_report.txt
+.coverage.*
+
 # Misc
 .DS_Store
 Thumbs.db

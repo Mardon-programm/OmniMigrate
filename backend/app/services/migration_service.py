@@ -1,18 +1,18 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.database import AsyncSessionLocal
 from app.core.prompts import DEFAULT_CONTEXT_RULE
 from app.models import JobStatus, MigrationJob
-from app.services.ast_parser import analyze_source, findings_to_text
+from app.services.ast_parser import analyze_source
 from app.services.diff_utils import diff_stats, generate_diff
 from app.services.llm_agent import LLMAgent
 from app.services.rule_engine import apply_modernization_rules
@@ -24,7 +24,7 @@ STATE_KEY = "job:state:{job_id}"
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class MigrationEngine:
@@ -108,15 +108,15 @@ class MigrationEngine:
                 )
 
             job.findings = findings
-            await self._push_state(job, JobStatus.analyzing.value, 25, "Analyzing modernization opportunities")
+            await self._push_state(
+                job, JobStatus.analyzing.value, 25, "Analyzing modernization opportunities"
+            )
             await self._persist(job)
 
             # 2. Refactoring: LLM provider, or deterministic local rule engine
             #    as a no-key fallback so the pipeline stays fully functional.
             context_rule = job.context_rule or DEFAULT_CONTEXT_RULE
-            use_local_rules = (
-                not settings.openai_api_key and settings.llm_fallback_to_rules
-            )
+            use_local_rules = not settings.openai_api_key and settings.llm_fallback_to_rules
             provider = "local-rule-engine" if use_local_rules else "llm"
             await self._push_state(
                 job,
@@ -135,7 +135,9 @@ class MigrationEngine:
             await self._persist(job)
 
             # 3. Sandbox verification with self-healing loop.
-            await self._push_state(job, JobStatus.verifying.value, 70, "Verifying output in sandbox")
+            await self._push_state(
+                job, JobStatus.verifying.value, 70, "Verifying output in sandbox"
+            )
             await self._persist(job)
 
             verification = self.sandbox.verify(output_code)
@@ -187,19 +189,17 @@ class MigrationEngine:
             await self._persist(job)
             logger.info("Migration job %s completed in %.2fs", job_id, elapsed)
 
-        except Exception as exc:  # noqa: BLE001 - pipeline must record failures.
+        except Exception as exc:
             logger.exception("Migration job %s failed", job_id)
             job.status = JobStatus.failed.value
             job.error_message = str(exc)[:4000]
             job.updated_at = _now()
-            try:
+            with contextlib.suppress(Exception):  # Redis must never break cleanup.
                 await self.redis.set(
                     STATE_KEY.format(job_id=job_id),
                     self._encode_state(JobStatus.failed.value, 100, str(exc)[:4000]),
                     ex=3600 * 24 * 7,
                 )
-            except Exception:
-                pass
             await self.session.commit()
 
 

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import dataclasses
 import logging
-from datetime import datetime, timezone
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Awaitable, Callable
 
 from app.core.config import settings
 from app.core.prompts import DEFAULT_CONTEXT_RULE
@@ -95,7 +96,7 @@ class AutonomousMigrationOrchestrator:
         if self.progress:
             try:
                 await self.progress(progress, stage, message)
-            except Exception:  # noqa: BLE001 - progress must never break the run.
+            except Exception:
                 logger.warning("Progress callback failed", exc_info=True)
 
     # --- Providers ---------------------------------------------------------
@@ -106,25 +107,39 @@ class AutonomousMigrationOrchestrator:
     def _make_refactor_fn(self, context_rule: str):
         """Return an async `(code, context_rule) -> code` refactor function."""
         if self._use_llm():
-            async def refactor(code: str, rule: str) -> str:
+
+            async def llm_refactor(code: str, rule: str) -> str:
                 try:
                     return await self.llm.refactor(code, rule, [])
-                except Exception:  # noqa: BLE001 - fall back to local rules.
-                    logger.warning("LLM refactor failed, falling back to local rules", exc_info=True)
+                except Exception:
+                    logger.warning(
+                        "LLM refactor failed, falling back to local rules", exc_info=True
+                    )
                     return apply_modernization_rules(code).code
-            return refactor
-        return lambda code, rule: apply_modernization_rules(code).code
+
+            return llm_refactor
+
+        async def rule_refactor(code: str, _rule: str) -> str:
+            return apply_modernization_rules(code).code
+
+        return rule_refactor
 
     def _make_heal_fn(self, context_rule: str):
         if self._use_llm():
-            async def heal(code: str, error: str, rule: str) -> str:
+
+            async def llm_heal(code: str, error: str, rule: str) -> str:
                 try:
                     return await self.llm.self_heal(code, error, rule)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     logger.warning("LLM heal failed, falling back to local rules", exc_info=True)
                     return apply_modernization_rules(code).code
-            return heal
-        return lambda code, error, rule: apply_modernization_rules(code).code
+
+            return llm_heal
+
+        async def rule_heal(code: str, _error: str, _rule: str) -> str:
+            return apply_modernization_rules(code).code
+
+        return rule_heal
 
     # --- Pipeline ----------------------------------------------------------
 
@@ -169,19 +184,7 @@ class AutonomousMigrationOrchestrator:
             # 3. Refactor the whole tree.
             await self._report(40, "refactor", "Refactoring Python sources")
             refactor_fn = self._make_refactor_fn(rule)
-
-            async def _run_process_dir() -> list[FileChange]:
-                # process_directory expects a sync callable; adapt the async provider.
-                if self._use_llm():
-                    async def sync_refactor(code: str, _rule: str) -> str:
-                        return await refactor_fn(code, _rule)
-
-                    return await self._process_dir_async(project_dir, sync_refactor, rule)
-                return await asyncio.to_thread(
-                    GitSandboxService.process_directory, project_dir, refactor_fn, rule
-                )
-
-            changed_files = await _run_process_dir()
+            changed_files = await self._process_dir_async(project_dir, refactor_fn, rule)
             log(f"Refactored {len(changed_files)} file(s)")
 
             # 4. Post-refactor tests with self-healing.
@@ -197,24 +200,14 @@ class AutonomousMigrationOrchestrator:
                     f"Self-healing attempt {heal_attempts}/{self.max_heal_attempts}",
                 )
                 error_output = f"{post_tests.stdout}\n{post_tests.stderr}"
-                if self._use_llm():
-                    healed = await self._heal_dir_async(project_dir, error_output, heal_fn, rule)
-                else:
-                    healed = await asyncio.to_thread(
-                        GitSandboxService.heal_code_with_error,
-                        project_dir,
-                        error_output,
-                        heal_fn,
-                        rule,
-                    )
+                healed = await self._heal_dir_async(project_dir, error_output, heal_fn, rule)
                 changed_files.extend(healed)
                 log(f"Heal attempt {heal_attempts}: fixed {len(healed)} file(s)")
                 post_tests = await asyncio.to_thread(GitSandboxService.run_tests, project_dir)
 
             if not post_tests.success:
                 raise GitOperationError(
-                    "Tests still failing after self-healing. "
-                    + post_tests.summary()
+                    "Tests still failing after self-healing. " + post_tests.summary()
                 )
 
             # 5. Commit, push, and open a PR.
@@ -260,28 +253,33 @@ class AutonomousMigrationOrchestrator:
     # --- Async directory walkers -------------------------------------------
 
     @staticmethod
-    async def _process_dir_async(project_dir: str, refactor_fn, context_rule: str) -> list[FileChange]:
+    async def _process_dir_async(
+        project_dir: str, refactor_fn, context_rule: str
+    ) -> list[FileChange]:
         root = Path(project_dir)
         changes: list[FileChange] = []
-        for path in sorted(root.rglob("*.py")):
+        paths = await asyncio.to_thread(lambda: sorted(root.rglob("*.py")))
+        for path in paths:
             rel = path.relative_to(root).as_posix()
             if GitSandboxService._is_excluded(rel):
                 continue
             try:
-                before = path.read_text(encoding="utf-8")
+                before = await asyncio.to_thread(path.read_text, encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
             try:
                 after = await refactor_fn(before, context_rule)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 continue
             if after and after != before:
-                path.write_text(after, encoding="utf-8")
+                await asyncio.to_thread(path.write_text, after, encoding="utf-8")
                 changes.append(FileChange(rel_path=rel, before=before, after=after))
         return changes
 
     @staticmethod
-    async def _heal_dir_async(project_dir: str, error_output: str, heal_fn, context_rule: str) -> list[FileChange]:
+    async def _heal_dir_async(
+        project_dir: str, error_output: str, heal_fn, context_rule: str
+    ) -> list[FileChange]:
         from app.services.git_sandbox import GitSandboxService
 
         root = Path(project_dir)
@@ -290,15 +288,15 @@ class AutonomousMigrationOrchestrator:
         for rel in affected:
             path = root / rel
             try:
-                broken = path.read_text(encoding="utf-8")
+                broken = await asyncio.to_thread(path.read_text, encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
             try:
                 healed = await heal_fn(broken, error_output, context_rule)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 continue
             if healed and healed != broken:
-                path.write_text(healed, encoding="utf-8")
+                await asyncio.to_thread(path.write_text, healed, encoding="utf-8")
                 changes.append(FileChange(rel_path=rel, before=broken, after=healed))
         return changes
 
@@ -306,7 +304,7 @@ class AutonomousMigrationOrchestrator:
 
     @staticmethod
     def _branch_name() -> str:
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        stamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
         return f"{settings.git_branch_prefix}/{stamp}"
 
     @staticmethod
@@ -372,13 +370,11 @@ async def run_autonomous_migration_job(
     body: str | None = None,
 ) -> dict:
     """Arq worker task that runs the full pipeline for an autonomous job."""
-    from datetime import datetime, timezone
-
-    from sqlalchemy import select
+    from datetime import datetime
 
     from app.core.database import AsyncSessionLocal
     from app.models import MigrationJob
-    from app.services.migration_service import MigrationEngine, STATE_KEY
+    from app.services.migration_service import STATE_KEY, MigrationEngine
 
     async with AsyncSessionLocal() as session:
         job = await session.get(MigrationJob, job_id)
@@ -389,19 +385,17 @@ async def run_autonomous_migration_job(
         async def report(progress: int, stage: str, message: str) -> None:
             status = STAGE_TO_JOB_STATUS.get(stage, job.status)
             job.status = status
-            job.updated_at = datetime.now(timezone.utc)
+            job.updated_at = datetime.now(UTC)
             await session.flush()
-            try:
+            with contextlib.suppress(Exception):  # Redis must never break the run.
                 await redis.set(
                     STATE_KEY.format(job_id=job.id),
                     MigrationEngine._encode_state(status, progress, message),
                     ex=3600 * 24 * 7,
                 )
-            except Exception:  # noqa: BLE001
-                pass
 
         try:
-            job.started_at = datetime.now(timezone.utc)
+            job.started_at = datetime.now(UTC)
             await session.commit()
             orchestrator = AutonomousMigrationOrchestrator(progress=report)
             result = await orchestrator.execute_full_pipeline(
@@ -418,7 +412,7 @@ async def run_autonomous_migration_job(
             job.output_code = result.diff_summary
             job.diff = result.diff_summary
             job.metrics = result.to_dict()
-            job.completed_at = datetime.now(timezone.utc)
+            job.completed_at = datetime.now(UTC)
             await session.commit()
             await redis.set(
                 STATE_KEY.format(job_id=job.id),
@@ -430,17 +424,15 @@ async def run_autonomous_migration_job(
                 ex=3600 * 24 * 7,
             )
             return result.to_dict()
-        except Exception as exc:  # noqa: BLE001 - record failures on the job.
+        except Exception as exc:
             job.status = JobStatus.failed.value
             job.error_message = str(exc)[:4000]
-            job.updated_at = datetime.now(timezone.utc)
+            job.updated_at = datetime.now(UTC)
             await session.commit()
-            try:
+            with contextlib.suppress(Exception):  # Redis must never break cleanup.
                 await redis.set(
                     STATE_KEY.format(job_id=job.id),
                     MigrationEngine._encode_state(JobStatus.failed.value, 100, str(exc)[:4000]),
                     ex=3600 * 24 * 7,
                 )
-            except Exception:  # noqa: BLE001
-                pass
             raise

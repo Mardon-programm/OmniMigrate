@@ -9,9 +9,7 @@ def test_xrange_to_range():
 
 
 def test_utcnow_to_now_timezone():
-    result = apply_modernization_rules(
-        "from datetime import datetime\nx = datetime.utcnow()\n"
-    )
+    result = apply_modernization_rules("from datetime import datetime\nx = datetime.utcnow()\n")
     assert "timezone.utc" in result.code
     assert "utcnow" not in result.code
     assert "import timezone" in result.code

@@ -1,5 +1,5 @@
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from sqlalchemy import (
     JSON,
@@ -14,7 +14,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 
-class JobStatus(str, Enum):
+class JobStatus(StrEnum):
     queued = "queued"
     parsing = "parsing"
     analyzing = "analyzing"
@@ -42,7 +42,7 @@ class MigrationJob(Base):
     diff: Mapped[str | None] = mapped_column(Text, nullable=True)
     findings: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     self_heal_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    status: Mapped[JobStatus] = mapped_column(
+    status: Mapped[str] = mapped_column(
         String(32), default=JobStatus.queued.value, index=True, nullable=False
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

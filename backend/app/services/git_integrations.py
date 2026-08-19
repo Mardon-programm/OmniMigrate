@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import subprocess
@@ -47,8 +48,7 @@ class GitHubIntegrationService:
             token_remote = remote_url
         else:
             token_remote = (
-                f"https://x-access-token:{github_token}@github.com/"
-                f"{repo_owner}/{repo_name}.git"
+                f"https://x-access-token:{github_token}@github.com/{repo_owner}/{repo_name}.git"
             )
         name = author_name or settings.git_author_name
         email = author_email or settings.git_author_email
@@ -74,17 +74,13 @@ class GitHubIntegrationService:
                 project_dir,
                 env,
             )
-        except subprocess.CalledProcessError as exc:
+        except subprocess.CalledProcessError:
             # Re-push without lease to tolerate concurrent upstream activity.
             _run_git(["push", "-u", "origin", branch_name], project_dir, env)
         finally:
             _run_git(["remote", "set-url", "origin", remote], project_dir, env)
-            try:
-                _run_git(
-                    ["config", "--unset-all", "http.extraheader"], project_dir, env
-                )
-            except subprocess.CalledProcessError:
-                pass
+            with contextlib.suppress(subprocess.CalledProcessError):
+                _run_git(["config", "--unset-all", "http.extraheader"], project_dir, env)
         return remote
 
     # --- Pull requests -----------------------------------------------------

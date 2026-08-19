@@ -31,9 +31,9 @@ def test_access_token_rejected_as_refresh():
     token = create_access_token(1, "admin")
     try:
         decode_token(token, expected_type="refresh")
-        assert False, "Expected token type mismatch to raise"
     except Exception:
-        pass
+        return
+    raise AssertionError("Expected token type mismatch to raise")
 
 
 def test_diff_utils():

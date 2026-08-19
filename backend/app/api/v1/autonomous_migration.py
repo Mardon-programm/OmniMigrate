@@ -33,8 +33,8 @@ async def run_autonomous_migration(
     """Clone a repo, run its tests, refactor, heal, and open a PR."""
     try:
         GitSandboxService.validate_repo_url(payload.repo_url)
-    except Exception as exc:  # noqa: BLE001 - surface friendly validation errors.
-        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:  # surface friendly validation errors.
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     # Resolve or create a project so the run shows up in the jobs UI.
     projects = ProjectRepository(session)
@@ -95,7 +95,7 @@ async def run_autonomous_migration(
         raise HTTPException(
             status_code=503,
             detail="Task queue unavailable; autonomous migration could not be started.",
-        )
+        ) from None
 
     return AutonomousRunResponse(
         job_id=job.id,
@@ -114,9 +114,7 @@ async def get_autonomous_job(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
     project = await ProjectRepository(session).get_by_id(job.project_id)
-    if project is None or (
-        project.owner_id != user.id and user.role != UserRole.admin
-    ):
+    if project is None or (project.owner_id != user.id and user.role != UserRole.admin):
         raise HTTPException(status_code=403, detail="Access denied.")
 
     redis: Redis = await get_redis()

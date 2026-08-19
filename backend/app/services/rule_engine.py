@@ -5,6 +5,7 @@ import logging
 import re
 
 import libcst as cst
+import libcst.helpers as cst_helpers
 
 logger = logging.getLogger(__name__)
 
@@ -25,12 +26,14 @@ class _ModernizationTransformer(cst.CSTTransformer):
         self.applied_rules: list[str] = []
         self.needs_timezone_import = False
 
-    def leave_Import(self, original_node: cst.Import, updated_node: cst.Import) -> cst.Import:
+    def leave_Import(
+        self, original_node: cst.Import, updated_node: cst.Import
+    ) -> cst.Import | cst.RemovalSentinel:
         # Remove imports of modules that no longer exist in modern Python.
         remaining = []
         removed = False
         for alias in updated_node.names:
-            name = cst.helpers.get_full_name_for_node(alias.name) or ""
+            name = cst_helpers.get_full_name_for_node(alias.name) or ""
             if name.split(".")[0] in REMOVED_MODULES:
                 removed = True
             else:
@@ -44,10 +47,10 @@ class _ModernizationTransformer(cst.CSTTransformer):
 
     def leave_ImportFrom(
         self, original_node: cst.ImportFrom, updated_node: cst.ImportFrom
-    ) -> cst.ImportFrom:
+    ) -> cst.ImportFrom | cst.RemovalSentinel:
         if updated_node.module is None:
             return updated_node
-        module_name = cst.helpers.get_full_name_for_node(updated_node.module) or ""
+        module_name = cst_helpers.get_full_name_for_node(updated_node.module) or ""
         if module_name.split(".")[0] in REMOVED_MODULES:
             self.applied_rules.append(f"removed import from removed module '{module_name}'")
             return cst.RemoveFromParent()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from typing import ClassVar
 
 from arq import cron
 from arq.connections import RedisSettings
@@ -27,7 +28,7 @@ async def _shutdown(ctx: dict) -> None:
 class WorkerSettings:
     """Arq configuration used by `arq app.core.worker.WorkerSettings`."""
 
-    functions = [
+    functions: ClassVar[list[str]] = [
         "app.services.migration_service.run_migration_job",
         "app.services.orchestrator.run_autonomous_migration_job",
     ]

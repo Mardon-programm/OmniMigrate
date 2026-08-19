@@ -1,4 +1,4 @@
-from typing import Annotated, AsyncGenerator
+from typing import Annotated
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -11,9 +11,7 @@ from app.core.database import get_db
 from app.core.security import CREDENTIALS_EXCEPTION_DETAIL, decode_token
 from app.models.user import User, UserRole
 
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl=f"{settings.api_prefix}/auth/login", auto_error=False
-)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_prefix}/auth/login", auto_error=False)
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
@@ -35,7 +33,7 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=CREDENTIALS_EXCEPTION_DETAIL,
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from None
     user_id = payload.get("sub")
     user = await session.get(User, int(user_id)) if user_id else None
     if user is None or not user.is_active:
@@ -64,8 +62,6 @@ def require_roles(*roles: UserRole):
     return _dependency
 
 
-async def get_user_or_none(
-    session: AsyncSession, user_id: int
-) -> User | None:
+async def get_user_or_none(session: AsyncSession, user_id: int) -> User | None:
     result = await session.execute(select(User).where(User.id == user_id))
     return result.scalar_one_or_none()

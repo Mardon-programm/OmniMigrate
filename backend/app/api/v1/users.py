@@ -30,9 +30,7 @@ async def list_users(
 
 
 @router.get("/{user_id}", response_model=UserRead)
-async def get_user(
-    user_id: int, session: DbSession, current: CurrentUser
-) -> UserRead:
+async def get_user(user_id: int, session: DbSession, current: CurrentUser) -> UserRead:
     repo = UserRepository(session)
     user = await repo.get_by_id(user_id)
     if user is None:

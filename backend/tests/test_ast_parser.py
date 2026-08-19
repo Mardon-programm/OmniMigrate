@@ -1,5 +1,3 @@
-import pytest
-
 from app.services.ast_parser import analyze_python_source
 
 
@@ -24,7 +22,12 @@ def test_detects_datetime_utcnow():
 
 
 def test_detects_legacy_typing():
-    code = "from typing import List, Optional\n\ndef f(a: List[int]) -> Optional[str]:\n    return None\n"
+    code = (
+        "from typing import List, Optional\n"
+        "\n"
+        "def f(a: List[int]) -> Optional[str]:\n"
+        "    return None\n"
+    )
     result = analyze_python_source(code)
     assert result.success
     cats = _categories(result)

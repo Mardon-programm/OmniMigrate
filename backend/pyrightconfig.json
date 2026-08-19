@@ -1,0 +1,8 @@
+{
+  "include": ["app"],
+  "exclude": ["tests", "alembic"],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "standard"
+}

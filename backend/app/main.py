@@ -30,8 +30,7 @@ app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description=(
-        "Autonomous AI-powered migration and modernization engine for legacy "
-        "source code."
+        "Autonomous AI-powered migration and modernization engine for legacy source code."
     ),
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",

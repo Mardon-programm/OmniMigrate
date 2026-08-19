@@ -83,8 +83,6 @@ class LLMAgent:
 
     @staticmethod
     def _get_system_prompt() -> str:
-        from app.core.prompts import SYSTEM_REFACTOR_PROMPT
-
         # The system prompt is constructed per-run via build_refactor_prompt.
         return (
             "You are OmniMigrate Core Engine, an elite automated AI code migration "
@@ -96,9 +94,16 @@ class LLMAgent:
     def _extract_code(raw: str) -> str:
         """Strip accidental markdown fences and conversational filler."""
         cleaned = raw.strip()
-        fence = re.search(r"```(?:python|py|javascript|typescript|ts|js|text)?\s*\n(.*?)\n```", cleaned, re.DOTALL)
+        fence = re.search(
+            r"```(?:python|py|javascript|typescript|ts|js|text)?\s*\n(.*?)\n```", cleaned, re.DOTALL
+        )
         if fence:
             return fence.group(1).rstrip() + "\n"
         # Remove a leading conversational sentence if the model ignored instructions.
-        cleaned = re.sub(r"^(Here(?:'s| is)(?: the)? (?:refactored|migrated|updated)? code[^:]*:?\s*\n+)", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(
+            r"^(Here(?:'s| is)(?: the)? (?:refactored|migrated|updated)? code[^:]*:?\s*\n+)",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
         return cleaned

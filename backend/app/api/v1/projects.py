@@ -56,9 +56,7 @@ async def create_project(
 
 
 @router.get("/{project_id}", response_model=ProjectRead)
-async def get_project(
-    project_id: int, session: DbSession, user: CurrentUser
-) -> ProjectRead:
+async def get_project(project_id: int, session: DbSession, user: CurrentUser) -> ProjectRead:
     project = await _get_owned_project(session, project_id, user)
     repo = ProjectRepository(session)
     item = ProjectRead.model_validate(project)

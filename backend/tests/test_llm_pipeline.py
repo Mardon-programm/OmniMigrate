@@ -3,8 +3,8 @@ from app.core.prompts import (
     build_refactor_prompt,
     build_self_heal_prompt,
 )
-from app.services.llm_agent import LLMAgent
 from app.services.ast_parser import findings_to_text
+from app.services.llm_agent import LLMAgent
 
 
 def test_refactor_prompt_contains_code_and_rule():
@@ -16,7 +16,13 @@ def test_refactor_prompt_contains_code_and_rule():
 
 def test_refactor_prompt_renders_findings():
     findings = [
-        {"line": 3, "severity": "warning", "category": "deprecated-api", "message": "utcnow", "suggestion": "use now"}
+        {
+            "line": 3,
+            "severity": "warning",
+            "category": "deprecated-api",
+            "message": "utcnow",
+            "suggestion": "use now",
+        }
     ]
     prompt = build_refactor_prompt("x", DEFAULT_CONTEXT_RULE, findings)
     assert "deprecated-api" in prompt
@@ -47,7 +53,13 @@ def test_extract_code_removes_filler_intro():
 
 def test_findings_to_text():
     findings = [
-        {"line": 1, "severity": "critical", "category": "security", "message": "secret", "suggestion": "use env"}
+        {
+            "line": 1,
+            "severity": "critical",
+            "category": "security",
+            "message": "secret",
+            "suggestion": "use env",
+        }
     ]
     text = findings_to_text(findings)
     assert "security" in text

@@ -58,9 +58,7 @@ class CodeSandbox:
 
         # 2. Runtime gate (best effort).
         if not self.enabled:
-            return VerificationResult(
-                success=True, syntax_ok=True, runtime_ok=True, errors=[]
-            )
+            return VerificationResult(success=True, syntax_ok=True, runtime_ok=True, errors=[])
 
         runtime_ok, runtime_error, stdout = self._execute(code)
         if not runtime_ok:

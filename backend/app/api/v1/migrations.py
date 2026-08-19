@@ -2,13 +2,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from app.core.deps import CurrentUser, DbSession
-from app.models import User, UserRole
-from app.schemas.job import JobRead, JobStatusRead, JobSubmitRequest
+from app.core.deps import CurrentUser
 from app.services.ast_parser import analyze_source
 from app.services.diff_utils import diff_stats, generate_diff
-from app.services.queue import enqueue_migration_job
-from app.services.repositories import JobRepository, ProjectRepository
 
 router = APIRouter()
 

@@ -3,7 +3,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-
 from app.services.git_sandbox import (
     GitOperationError,
     GitSandboxService,
@@ -60,9 +59,7 @@ def git_repo():
         _git(repo, "init", "-b", "main")
         _git(repo, "config", "user.email", "t@t.t")
         _git(repo, "config", "user.name", "T")
-        (repo / "legacy.py").write_text(
-            "def get(name):\n    return name\n", encoding="utf-8"
-        )
+        (repo / "legacy.py").write_text("def get(name):\n    return name\n", encoding="utf-8")
         _git(repo, "add", ".")
         _git(repo, "commit", "-m", "init")
         yield repo
@@ -93,9 +90,11 @@ class TestProcessDirectory:
         )
         changes = GitSandboxService.process_directory(
             sandbox_project,
-            lambda code, rule: __import__("app.services.rule_engine", fromlist=["x"])
-            .apply_modernization_rules(code)
-            .code,
+            lambda code, rule: (
+                __import__("app.services.rule_engine", fromlist=["x"])
+                .apply_modernization_rules(code)
+                .code
+            ),
             "",
         )
         assert len(changes) == 1
@@ -110,9 +109,11 @@ class TestProcessDirectory:
         )
         changes = GitSandboxService.process_directory(
             sandbox_project,
-            lambda code, rule: __import__("app.services.rule_engine", fromlist=["x"])
-            .apply_modernization_rules(code)
-            .code,
+            lambda code, rule: (
+                __import__("app.services.rule_engine", fromlist=["x"])
+                .apply_modernization_rules(code)
+                .code
+            ),
             "",
         )
         assert changes == []
@@ -128,22 +129,20 @@ class TestHealCodeWithError:
         assert files == ["legacy.py"]
 
     def test_heals_implicated_file(self, git_repo):
-        (git_repo / "legacy.py").write_text(
-            "for i in xrange(3):\n    pass\n", encoding="utf-8"
-        )
+        (git_repo / "legacy.py").write_text("for i in xrange(3):\n    pass\n", encoding="utf-8")
         error = (
             f'File "{git_repo}/legacy.py", line 1, in <module>\n'
             "NameError: name 'xrange' is not defined"
         )
 
         def heal(code, err, rule):
-            return __import__("app.services.rule_engine", fromlist=["x"]).apply_modernization_rules(
-                code
-            ).code
+            return (
+                __import__("app.services.rule_engine", fromlist=["x"])
+                .apply_modernization_rules(code)
+                .code
+            )
 
-        changes = GitSandboxService.heal_code_with_error(
-            str(git_repo), error, heal, ""
-        )
+        changes = GitSandboxService.heal_code_with_error(str(git_repo), error, heal, "")
         assert any(c.rel_path == "legacy.py" for c in changes)
 
 

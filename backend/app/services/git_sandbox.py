@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-import os
 import re
 import shutil
 import subprocess
@@ -11,7 +10,6 @@ import time
 from pathlib import Path
 
 from app.core.config import settings
-from app.services.rule_engine import apply_modernization_rules
 
 logger = logging.getLogger(__name__)
 
@@ -183,7 +181,7 @@ class GitSandboxService:
         """Best-effort removal of a sandbox clone."""
         try:
             shutil.rmtree(project_dir, ignore_errors=True)
-        except Exception:  # noqa: BLE001 - cleanup must never raise.
+        except Exception:
             logger.warning("Failed to remove sandbox %s", project_dir)
 
     # --- Directory refactoring --------------------------------------------
@@ -209,7 +207,7 @@ class GitSandboxService:
                 continue
             try:
                 after = refactor_fn(before, context_rule)
-            except Exception:  # noqa: BLE001 - one bad file must not kill the run.
+            except Exception:
                 logger.warning("Refactor failed for %s", rel, exc_info=True)
                 continue
             if after and after != before:
@@ -233,7 +231,7 @@ class GitSandboxService:
                 continue
             try:
                 healed = heal_fn(broken, error_output, context_rule)
-            except Exception:  # noqa: BLE001 - never let healing break the loop.
+            except Exception:
                 logger.warning("Healing failed for %s", rel, exc_info=True)
                 continue
             if healed and healed != broken:

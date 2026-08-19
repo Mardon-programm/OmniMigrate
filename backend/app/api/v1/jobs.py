@@ -5,10 +5,10 @@ import json
 from fastapi import APIRouter, HTTPException, Query, status
 from redis.asyncio import Redis
 
-from app.core.deps import CurrentUser, DbSession
 from app.core.database import get_redis
+from app.core.deps import CurrentUser, DbSession
 from app.core.prompts import DEFAULT_CONTEXT_RULE
-from app.models import JobStatus, MigrationJob, Project, User, UserRole
+from app.models import JobStatus, MigrationJob, User, UserRole
 from app.schemas.job import JobRead, JobStatusRead, JobSubmitRequest
 from app.services.queue import enqueue_migration_job
 from app.services.repositories import JobRepository, ProjectRepository
@@ -121,9 +121,7 @@ async def get_job(job_id: int, session: DbSession, user: CurrentUser) -> JobRead
 
 
 @router.get("/{job_id}/status", response_model=JobStatusRead)
-async def get_job_status(
-    job_id: int, session: DbSession, user: CurrentUser
-) -> JobStatusRead:
+async def get_job_status(job_id: int, session: DbSession, user: CurrentUser) -> JobStatusRead:
     """Return real-time job status, preferring the live Redis state."""
     job = await _get_job(session, job_id, user)
     redis = await get_redis()

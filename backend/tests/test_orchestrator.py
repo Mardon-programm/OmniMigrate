@@ -1,9 +1,8 @@
 import pytest
-
-from app.services.git_sandbox import GitSandboxService, GitOperationError
+from app.services.git_sandbox import GitOperationError, GitSandboxService
 from app.services.orchestrator import (
-    AutonomousMigrationOrchestrator,
     STAGE_TO_JOB_STATUS,
+    AutonomousMigrationOrchestrator,
 )
 
 
