@@ -25,12 +25,12 @@
 
 Фундамент, без которого не бывает «10». Делается первым и включает всё.
 
-- [ ] CI/CD (GitHub Actions): ruff, pyright/mypy, pytest+coverage, vitest, docker build — гейт на каждый PR.
-- [ ] pre-commit hooks (ruff format, check).
-- [ ] ruff + pyright конфиги в репо (сейчас их нет).
+- [x] CI/CD (GitHub Actions): ruff, pyright/mypy, pytest+coverage, vitest, docker build — гейт на каждый PR.
+- [x] pre-commit hooks (ruff format, check).
+- [x] ruff + pyright конфиги в репо (сейчас их нет).
 - [ ] Интеграционные тесты API против реального Postgres (testcontainers).
-- [ ] Политика: «feature = тесты + документация» — чек-лист в PR-шаблоне.
-- [ ] Coverage gate 85% на backend и frontend.
+- [x] Политика: «feature = тесты + документация» — чек-лист в PR-шаблоне.
+- [x] Coverage gate 85% на backend и frontend.
 
 **Приёмка:** пустой репозиторий → один `git push` → все проверки проходят зелёными.
 
