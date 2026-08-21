@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     # --- Storage ---
     workspace_root: str = "/data/workspaces"
 
+    # --- Stripe / Billing ---
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+
     @property
     def postgres_url_for_alembic(self) -> str:
         return self.database_url.replace("+asyncpg", "")

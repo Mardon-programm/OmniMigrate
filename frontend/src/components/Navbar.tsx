@@ -1,5 +1,5 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { ArrowRightLeft, LogOut, TerminalSquare } from "lucide-react";
+import { ArrowRightLeft, LogOut, Settings, TerminalSquare } from "lucide-react";
 
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useAuth } from "@/context/AuthContext";
@@ -14,6 +14,8 @@ export function Navbar() {
     { to: "/", label: t("nav.dashboard"), end: true },
     { to: "/projects", label: t("nav.projects"), end: false },
     { to: "/upload", label: t("nav.upload"), end: false },
+    { to: "/autonomous", label: t("nav.autonomous"), end: false },
+    { to: "/organizations", label: t("nav.organizations"), end: false },
   ];
 
   const handleLogout = () => {
@@ -60,6 +62,20 @@ export function Navbar() {
             </div>
 
             <div className="ml-1 flex items-center gap-2.5">
+              {user.role === "admin" && (
+                <NavLink
+                  to="/admin"
+                  className={({ isActive }) =>
+                    `rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+                      isActive
+                        ? "bg-primary/15 text-primary shadow-glow-sm"
+                        : "text-muted hover:text-slate-200 hover:bg-surface2"
+                    }`
+                  }
+                >
+                  {t("nav.admin")}
+                </NavLink>
+              )}
               <LanguageSwitcher compact />
               <div className="flex items-center gap-3 border-l border-border pl-2.5">
                 <div className="text-right leading-tight">
@@ -70,6 +86,13 @@ export function Navbar() {
                     {t(`nav.role.${user.role}`)}
                   </span>
                 </div>
+                <NavLink
+                  to="/settings"
+                  className="rounded-lg p-2 text-muted transition-colors hover:bg-surface2 hover:text-primary"
+                  title={t("nav.settings")}
+                >
+                  <Settings className="h-4 w-4" />
+                </NavLink>
                 <button
                   onClick={handleLogout}
                   className="rounded-lg p-2 text-muted transition-colors hover:bg-surface2 hover:text-danger"

@@ -5,15 +5,19 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ToastProvider } from "@/context/ToastContext";
 import { I18nProvider } from "@/i18n";
+import { Admin } from "@/pages/Admin";
+import { AutonomousPipeline } from "@/pages/AutonomousPipeline";
 import { CodeUpload } from "@/pages/CodeUpload";
 import { Dashboard } from "@/pages/Dashboard";
 import { JobDetails } from "@/pages/JobDetails";
 import { Jobs } from "@/pages/Jobs";
 import { Login } from "@/pages/Login";
 import { NotFound } from "@/pages/NotFound";
+import { Organizations } from "@/pages/Organizations";
 import { ProjectDetails } from "@/pages/ProjectDetails";
 import { Projects } from "@/pages/Projects";
 import { Register } from "@/pages/Register";
+import { Settings } from "@/pages/Settings";
 
 function Shell() {
   const { user } = useAuth();
@@ -73,6 +77,38 @@ function Shell() {
               element={
                 <ProtectedRoute>
                   <JobDetails />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/autonomous"
+              element={
+                <ProtectedRoute>
+                  <AutonomousPipeline />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/organizations"
+              element={
+                <ProtectedRoute>
+                  <Organizations />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute>
+                  <Admin />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <Settings />
                 </ProtectedRoute>
               }
             />

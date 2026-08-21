@@ -53,11 +53,11 @@
 
 ## Фаза 2 — Глубина продукта (нед. 4–7) · ~25 дней
 
-- [ ] **UI git-пайплайна**: форма repo/token/branch, живой прогресс, просмотр PR-дифа до пуша.
+- [x] **UI git-пайплайна**: форма repo/token/branch, живой прогресс, просмотр PR-дифа до пуша.
 - [ ] PR-интеграция: draft-PR, labels, reviewers, комментарии к строкам дифа.
 - [ ] Мультиязычность: JS/TS, Java, Go; фреймворки (Django→FastAPI, jQuery→React).
 - [ ] Review-флоу: approve/reject миграции, apply к репозиторию, откат.
-- [ ] Job management: cancel/retry/pause, webhook-уведомления (внешние).
+- [x] Job management: cancel/retry/pause, webhook-уведомления (внешние).
 - [ ] **Метрики использования**: jobs, LLM-токены, файлы, минуты — по организации.
 - [ ] Эвристики качества миграции (score, риск-анализ изменений).
 
@@ -67,12 +67,12 @@
 
 ## Фаза 3 — Бизнес-слой (нед. 7–9) · ~20 дней
 
-- [ ] Биллинг: Stripe (Free / Team / Enterprise), metered billing по метрикам.
+- [x] Биллинг: Stripe (Free / Team / Enterprise), metered billing по метрикам.
 - [ ] Инвойсы, receipt, billing portal, self-serve upgrade/downgrade.
-- [ ] Лимиты и квоты по планам (jobs/мес, файлы, LLM-токены).
-- [ ] Организационный онбординг: приглашения, инвайт-ссылки.
+- [x] Лимиты и квоты по планам (jobs/мес, файлы, LLM-токены).
+- [x] Организационный онбординг: приглашения, инвайт-ссылки.
 - [ ] SCIM-провижининг пользователей из корпоративного IdP.
-- [ ] Дашборд usage для клиента и админа.
+- [x] Дашборд usage для клиента и админа.
 
 **Приёмка:** клиент регистрируется, платит картой, видит счёт и лимиты — без звонка менеджеру.
 
@@ -98,6 +98,7 @@
 - [ ] SOC 2 readiness: политики безопасности, access reviews, retention.
 - [ ] SLA-документ, support-тиры, ответ на RFP/RFI.
 - [ ] On-prem / private-cloud вариант (Helm chart / air-gapped).
+- [x] CONTRIBUTING.md, LICENSE, deployment guide.
 
 **Приёмка:** типовой RFP enterprise-клиента закрывается имеющимися артефактами.
 

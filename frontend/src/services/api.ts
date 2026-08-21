@@ -1,13 +1,18 @@
 import axios, { AxiosError, type AxiosInstance } from "axios";
 
 import type {
+  AuditLogEntry,
   DiffPayload,
   Finding,
   Job,
   JobStatusRead,
+  OrgMember,
+  Organization,
+  Plan,
   Project,
   TokenResponse,
   User,
+  UserRead,
 } from "@/types";
 
 const TOKEN_KEY = "omnimigrate_access_token";
@@ -150,4 +155,38 @@ export const api = {
   previewDiff: (legacy: string, modern: string) =>
     unwrap(client.post<DiffPayload>("/migrations/preview-diff", { legacy, modern })),
   engineHealth: () => unwrap(client.get<Record<string, unknown>>("/migrations/health")),
+
+  // Autonomous migration
+  runAutonomous: (data: { repo_url: string; github_token?: string; base_branch?: string }) =>
+    unwrap(client.post("/autonomous/run", data)),
+  getAutonomousJob: (id: number) =>
+    unwrap(client.get(`/autonomous/jobs/${id}`)),
+
+  // Organizations
+  createOrg: (data: { name: string; slug: string; description?: string }) =>
+    unwrap(client.post<Organization>("/organizations", data)),
+  getOrg: (id: number) =>
+    unwrap(client.get<Organization>(`/organizations/${id}`)),
+  listOrgMembers: (orgId: number) =>
+    unwrap(client.get<OrgMember[]>(`/organizations/${orgId}/members`)),
+  addOrgMember: (orgId: number, data: { user_id: number; role: string }) =>
+    unwrap(client.post<OrgMember>(`/organizations/${orgId}/members`, data)),
+  updateOrgMember: (orgId: number, memberId: number, data: { role?: string; is_active?: boolean }) =>
+    unwrap(client.patch<OrgMember>(`/organizations/${orgId}/members/${memberId}`, data)),
+  removeOrgMember: (orgId: number, memberId: number) =>
+    unwrap(client.delete(`/organizations/${orgId}/members/${memberId}`)),
+  listAuditLogs: (orgId: number, limit = 50, offset = 0) =>
+    unwrap(client.get<AuditLogEntry[]>(`/organizations/${orgId}/audit-logs`, { params: { limit, offset } })),
+
+  // Users (admin)
+  listUsers: () => unwrap(client.get<UserRead[]>("/users")),
+  createUser: (data: { email: string; password: string; full_name: string; role?: string }) =>
+    unwrap(client.post<UserRead>("/users", data)),
+  updateUser: (id: number, data: { full_name?: string; role?: string; is_active?: boolean }) =>
+    unwrap(client.patch<UserRead>(`/users/${id}`, data)),
+  changePassword: (id: number, data: { current_password: string; new_password: string }) =>
+    unwrap(client.post(`/users/${id}/password`, data)),
+
+  // Billing
+  listPlans: () => unwrap(client.get<Plan[]>("/billing/plans")),
 };

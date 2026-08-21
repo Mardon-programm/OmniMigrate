@@ -184,6 +184,12 @@ def _clean_tables():
 
 async def _clean():
     async with test_engine.begin() as conn:
+        await conn.execute(text("DELETE FROM usage_records"))
+        await conn.execute(text("DELETE FROM subscriptions"))
+        await conn.execute(text("DELETE FROM plans"))
+        await conn.execute(text("DELETE FROM audit_logs"))
+        await conn.execute(text("DELETE FROM organization_members"))
+        await conn.execute(text("DELETE FROM organizations"))
         await conn.execute(text("DELETE FROM migration_jobs"))
         await conn.execute(text("DELETE FROM projects"))
         await conn.execute(text("DELETE FROM users"))

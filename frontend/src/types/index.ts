@@ -103,3 +103,55 @@ export interface DiffPayload {
   diff: string;
   stats: DiffStats;
 }
+
+export interface Organization {
+  id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface OrgMember {
+  id: number;
+  organization_id: number;
+  user_id: number;
+  role: "owner" | "admin" | "member" | "viewer";
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface AuditLogEntry {
+  id: number;
+  organization_id: number | null;
+  user_id: number | null;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  detail: string | null;
+  created_at: string;
+}
+
+export interface Plan {
+  id: number;
+  name: string;
+  amount_cents: number;
+  currency: string;
+  interval: "monthly" | "yearly";
+  max_jobs_per_month: number;
+  max_files_per_job: number;
+  max_llm_tokens_per_month: number;
+  max_org_members: number;
+  features: string | null;
+  is_active: boolean;
+}
+
+export interface UserRead {
+  id: number;
+  email: string;
+  full_name: string;
+  role: UserRole;
+  is_active: boolean;
+  created_at: string;
+}

@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.v1 import (
     auth,
     autonomous_migration,
+    billing,
     jobs,
     migrations,
     organizations,
@@ -23,3 +24,4 @@ router.include_router(
     prefix="/autonomous",
     tags=["autonomous migration"],
 )
+router.include_router(billing.router, prefix="/billing", tags=["billing"])
