@@ -18,6 +18,7 @@ from app.services.git_sandbox import GitSandboxService
 from app.services.migration_service import STATE_KEY
 from app.services.queue import enqueue_autonomous_migration
 from app.services.repositories import JobRepository, ProjectRepository
+from app.services.token_encryption import encrypt_token
 
 router = APIRouter()
 
@@ -76,12 +77,13 @@ async def run_autonomous_migration(
     await session.refresh(job)
 
     try:
+        encrypted_token = encrypt_token(payload.github_token)
         await enqueue_autonomous_migration(
             job_id=job.id,
             repo_url=payload.repo_url,
             repo_owner=payload.repo_owner,
             repo_name=payload.repo_name,
-            github_token=payload.github_token,
+            github_token=encrypted_token,
             context_rule=payload.context_rule,
             base_branch=payload.base_branch,
             title=payload.title,

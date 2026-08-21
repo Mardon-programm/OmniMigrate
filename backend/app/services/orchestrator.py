@@ -382,6 +382,10 @@ async def run_autonomous_migration_job(
             raise RuntimeError(f"Autonomous job {job_id} not found.")
         redis = ctx["redis"]
 
+        from app.services.token_encryption import decrypt_token
+
+        decrypted_token = decrypt_token(github_token)
+
         async def report(progress: int, stage: str, message: str) -> None:
             status = STAGE_TO_JOB_STATUS.get(stage, job.status)
             job.status = status
@@ -400,7 +404,7 @@ async def run_autonomous_migration_job(
             orchestrator = AutonomousMigrationOrchestrator(progress=report)
             result = await orchestrator.execute_full_pipeline(
                 repo_url=repo_url,
-                github_token=github_token,
+                github_token=decrypted_token,
                 repo_owner=repo_owner,
                 repo_name=repo_name,
                 context_rule=context_rule,

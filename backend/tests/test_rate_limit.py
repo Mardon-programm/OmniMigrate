@@ -138,3 +138,21 @@ class TestRateLimitMiddleware:
         response = await rate_limit_middleware(request, call_next)
         assert response.status_code == 200
         assert called["value"] is False
+
+    async def test_org_rate_limit_429(self, monkeypatch):
+        async def _not_limited(*a, **k):
+            return False
+
+        async def _org_limited(*a, **k):
+            return True
+
+        monkeypatch.setattr("app.core.rate_limit.is_rate_limited", _not_limited)
+        monkeypatch.setattr("app.core.rate_limit.is_org_rate_limited", _org_limited)
+
+        async def call_next(request):
+            return JSONResponse({"ok": True})
+
+        request = _make_request(None, path="/api/v1/organizations/1/members")
+        response = await rate_limit_middleware(request, call_next)
+        assert response.status_code == 429
+        assert b"ORG_RATE_LIMITED" in response.body

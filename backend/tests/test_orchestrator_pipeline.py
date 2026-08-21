@@ -9,6 +9,7 @@ from app.models import JobStatus, MigrationJob, Project
 from app.services.git_integrations import GitHubIntegrationService
 from app.services.git_sandbox import GitOperationError
 from app.services.orchestrator import AutonomousMigrationOrchestrator
+from app.services.token_encryption import encrypt_token
 from tests.conftest import make_user
 
 
@@ -198,7 +199,7 @@ class TestWorkerEntrypoint:
             remote,
             "acme",
             "legacy",
-            "fake-token",
+            encrypt_token("fake-token"),
             None,
             "main",
         )
@@ -241,7 +242,7 @@ class TestWorkerEntrypoint:
                 remote,
                 "acme",
                 "legacy",
-                "token",
+                encrypt_token("token"),
                 None,
                 "main",
             )

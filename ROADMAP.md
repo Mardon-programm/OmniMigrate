@@ -39,13 +39,13 @@
 ## Фаза 1 — Enterprise-безопасность (нед. 2–4) · ~20 дней
 
 - [ ] SSO: SAML + OIDC (Auth0 / Keycloak / custom), MFA, session management.
-- [ ] Организации/тенанты: модель Organization → Team → User; роли owner/admin/member/viewer.
-- [ ] RBAC на уровне ресурсов (projects/jobs внутри организации).
-- [ ] **Audit log**: сервис записи «кто/что/когда/с каких данных» + API + UI.
-- [ ] Секреты: GitHub-токены шифруются (KMS/Vault) и **никогда** не попадают в Redis/аргументы arq.
+- [x] Организации/тенанты: модель Organization → Team → User; роли owner/admin/member/viewer.
+- [x] RBAC на уровне ресурсов (projects/jobs внутри организации).
+- [x] **Audit log**: сервис записи «кто/что/когда/с каких данных» + API + UI.
+- [x] Секреты: GitHub-токены шифруются (Fernet + SHA-256 derived key) и **никогда** не попадают в Redis/аргументы arq в открытом виде.
 - [ ] Изоляция sandbox: job в отдельном контейнере (ephemeral Docker / DinD) с ulimits, cgroups, без сетевого egress кроме allowlist.
-- [ ] SSRF-хардненинг: DNS-rebinding защита, валидация IP перед клоном.
-- [ ] Rate limit на организацию (не только глобально).
+- [x] SSRF-харденинг: DNS-rebinding защита, валидация IP перед клоном (RFC1918, link-local, metadata IP).
+- [x] Rate limit на организацию (не только глобально).
 
 **Приёмка:** аудит-лог фиксирует каждый чувствительный вызов; токен недоступен даже из Redis-дампа.
 

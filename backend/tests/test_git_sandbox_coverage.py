@@ -321,7 +321,7 @@ class TestFilesFromError:
     def test_deduplicates_files(self, tmp_path):
         (tmp_path / "a.py").write_text("x=1\n", encoding="utf-8")
         a_path = tmp_path / "a.py"
-        error_output = f'File "{a_path}", line 1\nNameError\n' f'File "{a_path}", line 2\nNameError'
+        error_output = f'File "{a_path}", line 1\nNameError\nFile "{a_path}", line 2\nNameError'
         files = GitSandboxService._files_from_error(str(tmp_path), error_output)
         assert files.count("a.py") == 1
 

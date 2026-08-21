@@ -121,6 +121,9 @@ class GitSandboxService:
         with `asyncio.to_thread` to avoid stalling the event loop.
         """
         url = cls.validate_repo_url(repo_url)
+        from app.services.ssrf import validate_url_for_clone
+
+        validate_url_for_clone(url)
         workspace = Path(settings.workspace_root)
         workspace.mkdir(parents=True, exist_ok=True)
         project_dir = Path(tempfile.mkdtemp(prefix="omnimigrate_", dir=workspace))
