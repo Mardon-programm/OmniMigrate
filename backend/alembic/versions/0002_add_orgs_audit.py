@@ -19,8 +19,10 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    # The org_role enum is created automatically by SQLAlchemy when the
+    # organization_members table below references it. Creating it explicitly
+    # as well would raise DuplicateObjectError on PostgreSQL.
     org_role = sa.Enum("owner", "admin", "member", "viewer", name="org_role")
-    org_role.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
         "organizations",

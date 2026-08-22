@@ -15,14 +15,23 @@ class Base(DeclarativeBase):
     """Declarative base for all SQLAlchemy models."""
 
 
-engine = create_async_engine(
-    settings.database_url,
-    echo=settings.debug,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,
-    pool_recycle=1800,
-)
+def _build_engine():
+    """Create the async engine with dialect-appropriate pool settings."""
+    url = settings.database_url
+    if url.startswith("sqlite"):
+        # SQLite (aiosqlite) uses NullPool and rejects pool sizing options.
+        return create_async_engine(url, echo=settings.debug)
+    return create_async_engine(
+        url,
+        echo=settings.debug,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,
+        pool_recycle=1800,
+    )
+
+
+engine = _build_engine()
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,

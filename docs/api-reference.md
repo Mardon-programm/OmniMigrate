@@ -1,6 +1,6 @@
 # API Reference
 
-Base URL: `http://localhost:8000/api/v1`
+Base URL: `http://localhost:8003/api/v1`
 
 All authenticated endpoints require `Authorization: Bearer <access_token>`.
 

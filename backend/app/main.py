@@ -136,10 +136,12 @@ async def readyz(request: Request) -> JSONResponse:
     except Exception:
         redis_ok = False
     try:
+        from sqlalchemy import text
+
         from app.core.database import AsyncSessionLocal
 
         async with AsyncSessionLocal() as session:
-            await session.execute("SELECT 1")
+            await session.execute(text("SELECT 1"))
     except Exception:
         db_ok = False
 

@@ -28,9 +28,9 @@ docker compose up --build
 ```
 
 - Frontend (Nginx): http://localhost
-- Backend API: http://localhost:8000
-- Swagger docs: http://localhost:8000/api/docs
-- Health check: http://localhost:8000/healthz
+- Backend API: http://localhost:8003
+- Swagger docs: http://localhost:8003/api/docs
+- Health check: http://localhost:8003/healthz
 
 Database migrations run automatically on backend startup (`alembic upgrade head`).
 
@@ -73,7 +73,7 @@ arq app.core.worker.WorkerSettings
 ```bash
 cd frontend
 npm install
-npm run dev                      # http://localhost:5173 (proxies /api -> :8000)
+npm run dev                      # http://localhost:5173 (proxies /api -> :8003)
 ```
 
 ## Configuration

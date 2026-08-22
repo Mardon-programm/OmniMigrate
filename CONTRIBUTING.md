@@ -25,7 +25,7 @@ python -m venv .venv
 .venv\Scripts\activate  # Windows
 pip install -r requirements.txt
 alembic upgrade head
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8003
 
 # Frontend (in a separate terminal)
 cd frontend
