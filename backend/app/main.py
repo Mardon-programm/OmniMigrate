@@ -12,7 +12,9 @@ from app.api.v1 import router as api_router
 from app.core.config import settings
 from app.core.database import close_redis, get_redis
 from app.core.logging import configure_logging
+from app.core.metrics import metrics_endpoint, setup_prometheus_middleware
 from app.core.rate_limit import rate_limit_middleware
+from app.core.tracing import setup_tracing, shutdown_tracing
 
 configure_logging(debug=settings.debug)
 logger = structlog.get_logger(__name__)
@@ -40,9 +42,13 @@ _validate_production_secrets()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if settings.otel_enabled:
+        setup_tracing()
     app.state.redis = await get_redis()
     yield
     await close_redis()
+    if settings.otel_enabled:
+        shutdown_tracing()
 
 
 app = FastAPI(
@@ -63,6 +69,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+if settings.prometheus_enabled:
+    setup_prometheus_middleware(app)
 
 
 @app.middleware("http")
@@ -114,3 +123,36 @@ async def root() -> dict:
 @app.get("/healthz")
 async def healthz() -> dict:
     return {"status": "ok", "service": settings.app_name}
+
+
+@app.get("/readyz")
+async def readyz(request: Request) -> JSONResponse:
+    """Readiness probe — checks Redis and DB connectivity."""
+    redis_ok = True
+    db_ok = True
+    try:
+        redis = request.app.state.redis
+        await redis.ping()
+    except Exception:
+        redis_ok = False
+    try:
+        from app.core.database import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as session:
+            await session.execute("SELECT 1")
+    except Exception:
+        db_ok = False
+
+    status_code = 200 if redis_ok and db_ok else 503
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": "ready" if redis_ok and db_ok else "degraded",
+            "redis": "ok" if redis_ok else "unavailable",
+            "database": "ok" if db_ok else "unavailable",
+        },
+    )
+
+
+if settings.prometheus_enabled:
+    app.add_route("/metrics", metrics_endpoint)

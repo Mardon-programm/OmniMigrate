@@ -106,16 +106,19 @@ class AutonomousMigrationOrchestrator:
         return bool(settings.openai_api_key)
 
     def _make_refactor_fn(self, context_rule: str):
-        """Return an async `(code, context_rule) -> code` refactor function."""
+        """Return an async `(code, context_rule) -> code` refactor function.
+
+        Graceful degradation chain:
+          1. LLM provider (if OPENAI_API_KEY is set)
+          2. Local deterministic rule engine (always available)
+        """
         if self._use_llm():
 
             async def llm_refactor(code: str, rule: str) -> str:
                 try:
                     return await self.llm.refactor(code, rule, [])
                 except Exception:
-                    logger.warning(
-                        "LLM refactor failed, falling back to local rules", exc_info=True
-                    )
+                    logger.warning("LLM unavailable, degrading to local rules", exc_info=True)
                     return apply_modernization_rules(code).code
 
             return llm_refactor
@@ -132,7 +135,7 @@ class AutonomousMigrationOrchestrator:
                 try:
                     return await self.llm.self_heal(code, error, rule)
                 except Exception:
-                    logger.warning("LLM heal failed, falling back to local rules", exc_info=True)
+                    logger.warning("LLM heal unavailable, degrading to local rules", exc_info=True)
                     return apply_modernization_rules(code).code
 
             return llm_heal

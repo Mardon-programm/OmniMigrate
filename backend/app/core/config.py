@@ -73,6 +73,12 @@ class Settings(BaseSettings):
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
 
+    # --- Observability ---
+    otel_enabled: bool = False
+    otel_service_name: str = "omnimigrate-backend"
+    otel_exporter_otlp_endpoint: str = ""
+    prometheus_enabled: bool = True
+
     @property
     def postgres_url_for_alembic(self) -> str:
         return self.database_url.replace("+asyncpg", "")

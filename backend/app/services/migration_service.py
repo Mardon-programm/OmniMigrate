@@ -15,6 +15,7 @@ from app.models import JobStatus, MigrationJob
 from app.services.ast_parser import analyze_source
 from app.services.diff_utils import diff_stats, generate_diff
 from app.services.llm_agent import LLMAgent
+from app.services.observability import record_sandbox_result
 from app.services.rule_engine import apply_modernization_rules
 from app.services.sandbox import CodeSandbox
 
@@ -165,12 +166,14 @@ class MigrationEngine:
                 verification = self.sandbox.verify(healed)
 
             if not verification.success:
+                record_sandbox_result(success=False)
                 raise RuntimeError(
                     "Sandbox verification failed after self-healing: "
                     + "; ".join(verification.errors[:5])
                 )
 
             # 4. Diff + completion.
+            record_sandbox_result(success=True)
             diff = generate_diff(job.input_code, output_code)
             job.diff = diff
             elapsed = time.monotonic() - started
