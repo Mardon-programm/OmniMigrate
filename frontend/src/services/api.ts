@@ -189,4 +189,14 @@ export const api = {
 
   // Billing
   listPlans: () => unwrap(client.get<Plan[]>("/billing/plans")),
+
+  // Auth lifecycle
+  logout: () => {
+    const rt = getRefreshToken();
+    return unwrap(client.post("/auth/logout", rt ? { refresh_token: rt } : {}));
+  },
+  forgotPassword: (email: string) =>
+    unwrap(client.post("/auth/forgot-password", { email })),
+  resetPassword: (token: string, newPassword: string) =>
+    unwrap(client.post("/auth/reset-password", { token, new_password: newPassword })),
 };

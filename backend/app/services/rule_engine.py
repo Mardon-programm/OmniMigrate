@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import dataclasses
-import logging
 import re
 
 import libcst as cst
 import libcst.helpers as cst_helpers
+import structlog
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 LEGACY_TYPING_NAMES = {
     "List": "list",

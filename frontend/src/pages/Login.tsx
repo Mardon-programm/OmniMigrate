@@ -88,6 +88,9 @@ export function Login() {
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
+          <Link to="/forgot-password" className="mt-1.5 block text-right text-xs text-primary hover:underline">
+            {t("auth.forgotPassword")}
+          </Link>
         </div>
 
         <button type="submit" disabled={submitting} className="btn-primary w-full py-2.5">

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import contextlib
-import logging
 import time
 from datetime import UTC, datetime
 from typing import Any
 
+import structlog
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,7 +18,7 @@ from app.services.llm_agent import LLMAgent
 from app.services.rule_engine import apply_modernization_rules
 from app.services.sandbox import CodeSandbox
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 STATE_KEY = "job:state:{job_id}"
 

@@ -9,6 +9,7 @@ import { Admin } from "@/pages/Admin";
 import { AutonomousPipeline } from "@/pages/AutonomousPipeline";
 import { CodeUpload } from "@/pages/CodeUpload";
 import { Dashboard } from "@/pages/Dashboard";
+import { ForgotPassword } from "@/pages/ForgotPassword";
 import { JobDetails } from "@/pages/JobDetails";
 import { Jobs } from "@/pages/Jobs";
 import { Login } from "@/pages/Login";
@@ -17,6 +18,7 @@ import { Organizations } from "@/pages/Organizations";
 import { ProjectDetails } from "@/pages/ProjectDetails";
 import { Projects } from "@/pages/Projects";
 import { Register } from "@/pages/Register";
+import { ResetPassword } from "@/pages/ResetPassword";
 import { Settings } from "@/pages/Settings";
 
 function Shell() {
@@ -31,6 +33,8 @@ function Shell() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
             <Route
               path="/"

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import dataclasses
-import logging
 import platform
 import re
 import shutil
@@ -10,9 +9,11 @@ import tempfile
 import time
 from pathlib import Path
 
+import structlog
+
 from app.core.config import settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Only these remote hosts may be cloned to keep the sandbox from hitting
 # internal networks (SSRF hardening).

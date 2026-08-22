@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import logging
 from contextlib import asynccontextmanager
 
+import structlog
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,14 +11,11 @@ from fastapi.responses import JSONResponse
 from app.api.v1 import router as api_router
 from app.core.config import settings
 from app.core.database import close_redis, get_redis
+from app.core.logging import configure_logging
 from app.core.rate_limit import rate_limit_middleware
 
-logging.basicConfig(
-    level=logging.DEBUG if settings.debug else logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
-
-logger = logging.getLogger(__name__)
+configure_logging(debug=settings.debug)
+logger = structlog.get_logger(__name__)
 
 
 def _validate_production_secrets() -> None:
@@ -90,7 +87,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    logging.getLogger(__name__).exception("Unhandled error on %s", request.url.path)
+    logger.exception("Unhandled error", path=request.url.path)
     if settings.debug:
         return JSONResponse(status_code=500, content={"detail": str(exc)})
     return JSONResponse(

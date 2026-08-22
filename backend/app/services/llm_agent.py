@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import logging
 import re
 
+import structlog
 from openai import AsyncOpenAI
 from tenacity import (
     retry,
@@ -14,7 +14,7 @@ from tenacity import (
 from app.core.config import settings
 from app.core.prompts import build_refactor_prompt, build_self_heal_prompt
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class LLMUnavailableError(RuntimeError):

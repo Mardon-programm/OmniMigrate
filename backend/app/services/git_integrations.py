@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import contextlib
-import logging
 import os
 import subprocess
 
 import httpx
+import structlog
 
 from app.core.config import settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class GitHubIntegrationError(RuntimeError):

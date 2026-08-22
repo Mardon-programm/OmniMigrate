@@ -18,8 +18,8 @@ export function Navbar() {
     { to: "/organizations", label: t("nav.organizations"), end: false },
   ];
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate("/login");
   };
 

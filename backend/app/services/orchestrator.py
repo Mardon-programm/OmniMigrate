@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
-import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
+
+import structlog
 
 from app.core.config import settings
 from app.core.prompts import DEFAULT_CONTEXT_RULE
@@ -21,7 +22,7 @@ from app.services.git_sandbox import (
 from app.services.llm_agent import LLMAgent
 from app.services.rule_engine import apply_modernization_rules
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclasses.dataclass
