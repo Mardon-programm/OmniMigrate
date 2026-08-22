@@ -189,6 +189,8 @@ export const api = {
 
   // Billing
   listPlans: () => unwrap(client.get<Plan[]>("/billing/plans")),
+  getUsageDashboard: (orgId: number) =>
+    unwrap(client.get(`/billing/organizations/${orgId}/dashboard`)),
 
   // Auth lifecycle
   logout: () => {

@@ -368,6 +368,18 @@ const en = {
     passwordsMismatch: "Passwords do not match",
     save: "Save",
   },
+  onboard: {
+    title: "Get started with OmniMigrate",
+    step1Title: "Create a project",
+    step1Desc: "Organize your legacy codebase by repository.",
+    step1Link: "Go to Projects",
+    step2Title: "Submit a migration",
+    step2Desc: "Paste code and run the AST analysis + AI pipeline.",
+    step2Link: "Start migrating",
+    step3Title: "Try autonomous mode",
+    step3Desc: "Point at a GitHub repo and let the engine do everything.",
+    step3Link: "Launch autonomous",
+  },
 };
 
 export type Translation = typeof en;
@@ -734,6 +746,18 @@ const ru: Translation = {
     passwordChanged: "Пароль успешно изменён",
     passwordsMismatch: "Пароли не совпадают",
     save: "Сохранить",
+  },
+  onboard: {
+    title: "Начните работу с OmniMigrate",
+    step1Title: "Создайте проект",
+    step1Desc: "Организуйте кодовую базу по репозиториям.",
+    step1Link: "Перейти к проектам",
+    step2Title: "Отправьте миграцию",
+    step2Desc: "Вставьте код и запустите AST-анализ + AI-конвейер.",
+    step2Link: "Начать миграцию",
+    step3Title: "Попробуйте автономный режим",
+    step3Desc: "Укажите URL репозитория GitHub — движок сделает всё сам.",
+    step3Link: "Запустить автономную",
   },
 };
 

@@ -16,6 +16,7 @@ import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { EmptyState } from "@/components/EmptyState";
 import { Spinner } from "@/components/Spinner";
+import { OnboardingChecklist } from "@/components/OnboardingChecklist";
 import { api } from "@/services/api";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/i18n";
@@ -62,6 +63,7 @@ export function Dashboard() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6">
+      <OnboardingChecklist />
       <div className="relative overflow-hidden rounded-3xl border border-border bg-surface/60 p-6 shadow-card sm:p-8">
         <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
         <div className="absolute -bottom-20 right-24 h-48 w-48 rounded-full bg-accent/10 blur-3xl" />

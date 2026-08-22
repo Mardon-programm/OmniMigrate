@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import Date, cast, func, select
 
 from app.core.config import settings
 from app.core.deps import CurrentUser, DbSession
+from app.models.billing import Plan, UsageRecord
 from app.models.organization import Organization, OrganizationMember, OrgRole
 from app.models.user import UserRole
 from app.schemas.billing import (
@@ -14,6 +17,9 @@ from app.schemas.billing import (
     CheckoutSessionResponse,
     PlanRead,
     SubscriptionRead,
+    UsageDashboardResponse,
+    UsageDataPoint,
+    UsageMetricDetail,
     WebhookResponse,
 )
 from app.services.billing import (
@@ -115,3 +121,74 @@ async def stripe_webhook(request: Request, db: DbSession):
     # In production: verify Stripe signature, parse event, update subscription.
     # For now, accept and acknowledge.
     return WebhookResponse(received=True)
+
+
+@router.get(
+    "/organizations/{org_id}/dashboard",
+    response_model=UsageDashboardResponse,
+)
+async def usage_dashboard(
+    org_id: int,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """Full usage dashboard: per-metric usage, quotas, and daily history."""
+    _org, _role = await _require_org_admin(org_id, user, db)
+
+    sub = await get_org_subscription(db, org_id)
+    plan = await db.get(Plan, sub.plan_id) if sub else None
+
+    period_start = datetime.now(UTC) - timedelta(days=30)
+
+    metric_limits = {
+        "jobs": plan.max_jobs_per_month if plan else 10,
+        "llm_tokens": plan.max_llm_tokens_per_month if plan else 100_000,
+        "files": plan.max_files_per_job if plan else 50,
+    }
+
+    metrics_detail: list[UsageMetricDetail] = []
+    for metric_name, limit in metric_limits.items():
+        # Current usage
+        usage_stmt = select(
+            func.coalesce(func.sum(UsageRecord.quantity), 0),
+        ).where(
+            UsageRecord.organization_id == org_id,
+            UsageRecord.metric == metric_name,
+            UsageRecord.recorded_at >= period_start,
+        )
+        used = (await db.execute(usage_stmt)).scalar_one()
+
+        # Daily history for sparkline
+        history_stmt = (
+            select(
+                cast(UsageRecord.recorded_at, Date).label("day"),
+                func.sum(UsageRecord.quantity).label("count"),
+            )
+            .where(
+                UsageRecord.organization_id == org_id,
+                UsageRecord.metric == metric_name,
+                UsageRecord.recorded_at >= period_start,
+            )
+            .group_by("day")
+            .order_by("day")
+        )
+        rows = (await db.execute(history_stmt)).all()
+        history = [UsageDataPoint(date=str(row.day), count=int(row.count)) for row in rows]
+
+        pct = round((used / limit * 100), 1) if limit > 0 else 0.0
+        metrics_detail.append(
+            UsageMetricDetail(
+                metric=metric_name,
+                used=int(used),
+                limit=limit,
+                percentage=pct,
+                history=history,
+            )
+        )
+
+    return UsageDashboardResponse(
+        organization_id=org_id,
+        plan_name=plan.name if plan else "free",
+        period_start=period_start,
+        metrics=metrics_detail,
+    )

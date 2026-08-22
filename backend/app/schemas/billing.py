@@ -69,3 +69,25 @@ class CheckoutSessionResponse(BaseModel):
 
 class WebhookResponse(BaseModel):
     received: bool = True
+
+
+class UsageDashboardResponse(BaseModel):
+    """Per-org usage dashboard with quota percentages."""
+
+    organization_id: int
+    plan_name: str
+    period_start: datetime
+    metrics: list[UsageMetricDetail]
+
+
+class UsageMetricDetail(BaseModel):
+    metric: str
+    used: int
+    limit: int
+    percentage: float
+    history: list[UsageDataPoint]
+
+
+class UsageDataPoint(BaseModel):
+    date: str
+    count: int
