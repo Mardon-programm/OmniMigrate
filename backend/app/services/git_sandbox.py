@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import platform
 import re
 import shutil
 import subprocess
@@ -18,6 +19,8 @@ logger = logging.getLogger(__name__)
 ALLOWED_GIT_HOSTS = {"github.com", "gitlab.com", "bitbucket.org", "gitea.com"}
 
 PYTHON_FILE_RE = re.compile(r"^[a-zA-Z0-9_]+\.py$")
+
+_IS_UNIX = platform.system() != "Windows"
 
 # Paths never touched during a directory refactor.
 EXCLUDED_DIRS = {
@@ -162,6 +165,7 @@ class GitSandboxService:
                 capture_output=True,
                 text=True,
                 timeout=settings.git_test_timeout_seconds,
+                preexec_fn=cls._sandbox_preexec if _IS_UNIX else None,
             )
         except subprocess.TimeoutExpired as exc:
             raise GitOperationError(
@@ -270,6 +274,22 @@ class GitSandboxService:
         return sorted(set(files))
 
     @staticmethod
+    def _sandbox_preexec() -> None:
+        """Apply resource limits to child processes (Unix only)."""
+        if platform.system() == "Windows":
+            return
+        try:
+            import importlib
+
+            _res = importlib.import_module("resource")
+            _res.setrlimit(_res.RLIMIT_AS, (1_073_741_824, 1_073_741_824))
+            _res.setrlimit(_res.RLIMIT_CPU, (60, 60))
+            _res.setrlimit(_res.RLIMIT_NOFILE, (256, 256))
+            _res.setrlimit(_res.RLIMIT_CORE, (0, 0))
+        except (ValueError, OSError):
+            pass
+
+    @staticmethod
     def _run(cmd: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess:
         try:
             proc = subprocess.run(
@@ -278,6 +298,7 @@ class GitSandboxService:
                 capture_output=True,
                 text=True,
                 timeout=timeout,
+                preexec_fn=GitSandboxService._sandbox_preexec if _IS_UNIX else None,
             )
         except subprocess.TimeoutExpired as exc:
             raise GitOperationError(f"Command timed out after {timeout}s: {' '.join(cmd)}") from exc

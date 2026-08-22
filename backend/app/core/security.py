@@ -62,3 +62,18 @@ def decode_token(token: str, expected_type: str = "access") -> dict[str, Any]:
     if payload.get("type") != expected_type:
         raise jwt.InvalidTokenError(f"Expected token type '{expected_type}'")
     return payload
+
+
+def create_password_reset_token(user_id: int) -> str:
+    """Create a short-lived opaque password reset token (random string)."""
+    import secrets
+
+    raw = secrets.token_urlsafe(32)
+    return raw
+
+
+def hash_reset_token(raw_token: str) -> str:
+    """Hash a raw password reset token for storage."""
+    import hashlib
+
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()

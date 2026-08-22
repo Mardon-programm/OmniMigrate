@@ -18,6 +18,28 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 
+logger = logging.getLogger(__name__)
+
+
+def _validate_production_secrets() -> None:
+    """Refuse to start in production if critical secrets are at default values."""
+    if settings.environment != "production":
+        return
+    issues: list[str] = []
+    if settings.secret_key == "change-me-in-production" or len(settings.secret_key) < 32:
+        issues.append("SECRET_KEY must be set to a secure random value (>=32 chars)")
+    if not settings.database_url or "omnimigrate:omnimigrate" in settings.database_url:
+        issues.append("DATABASE_URL must use strong credentials, not the defaults")
+    if settings.bcrypt_rounds < 12:
+        issues.append("BCRYPT_ROUNDS must be at least 12 in production")
+    if issues:
+        msg = "Startup secret validation failed:\n  - " + "\n  - ".join(issues)
+        logger.critical(msg)
+        raise SystemExit(msg)
+
+
+_validate_production_secrets()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

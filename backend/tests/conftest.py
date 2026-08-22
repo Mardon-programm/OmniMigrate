@@ -187,6 +187,7 @@ async def _clean():
         await conn.execute(text("DELETE FROM usage_records"))
         await conn.execute(text("DELETE FROM subscriptions"))
         await conn.execute(text("DELETE FROM plans"))
+        await conn.execute(text("DELETE FROM password_reset_tokens"))
         await conn.execute(text("DELETE FROM audit_logs"))
         await conn.execute(text("DELETE FROM organization_members"))
         await conn.execute(text("DELETE FROM organizations"))
