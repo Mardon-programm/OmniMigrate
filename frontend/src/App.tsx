@@ -26,7 +26,16 @@ function Shell() {
   return (
     <div className="relative min-h-screen bg-ambient">
       <div className="pointer-events-none fixed inset-0 bg-grid" aria-hidden="true" />
+      <div
+        className="pointer-events-none fixed inset-0 opacity-90"
+        style={{
+          backgroundImage:
+            "radial-gradient(900px 480px at 12% -8%, rgba(16,185,129,0.10), transparent 62%), radial-gradient(820px 420px at 92% -12%, rgba(6,182,212,0.08), transparent 60%)",
+        }}
+        aria-hidden="true"
+      />
       <div className="pointer-events-none fixed inset-x-0 top-0 h-24 bg-gradient-to-b from-primary/10 to-transparent" aria-hidden="true" />
+      <div className="noise" aria-hidden="true" />
       <div className="relative">
         {user && <Navbar />}
         <main>

@@ -24,11 +24,16 @@ export function Navbar() {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/80 bg-background/70 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 border-b border-border/80 bg-slate-950/80 backdrop-blur-md">
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent"
+      />
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         <Link to="/" className="group flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-gradient shadow-glow-sm transition-transform group-hover:scale-105">
-            <ArrowRightLeft className="h-5 w-5 text-white" />
+          <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-brand-gradient shadow-glow transition-transform duration-150 ease-spring group-hover:scale-105">
+            <ArrowRightLeft className="h-5 w-5 text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.7)]" />
+            <span className="pointer-events-none absolute -inset-1 rounded-2xl bg-primary/25 blur-lg" />
           </div>
           <div className="leading-tight">
             <span className="block text-base font-semibold text-white">
@@ -38,6 +43,13 @@ export function Navbar() {
               {t("app.tagline")}
             </span>
           </div>
+          <span
+            title={t("nav.systemNominal")}
+            className="led ml-2 hidden md:flex"
+          >
+            <span className="led-ring bg-success/60" />
+            <span className="led-core bg-success shadow-[0_0_8px_rgba(16,185,129,0.9)]" />
+          </span>
         </Link>
 
         {user && (

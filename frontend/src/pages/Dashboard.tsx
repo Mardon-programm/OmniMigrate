@@ -64,15 +64,27 @@ export function Dashboard() {
   return (
     <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6">
       <OnboardingChecklist />
-      <div className="relative overflow-hidden rounded-3xl border border-border bg-surface/60 p-6 shadow-card sm:p-8">
-        <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
-        <div className="absolute -bottom-20 right-24 h-48 w-48 rounded-full bg-accent/10 blur-3xl" />
+      <div className="group relative overflow-hidden rounded-2xl border border-border bg-surface/60 p-6 shadow-card sm:p-8">
+        <span className="hud-frame always" aria-hidden />
+        <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-primary/20 blur-3xl animate-aurora" />
+        <div className="pointer-events-none absolute -bottom-24 right-32 h-52 w-52 rounded-full bg-accent/15 blur-3xl animate-aurora-slow" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-16 animate-scan bg-gradient-to-b from-transparent via-primary/[0.05] to-transparent" />
         <div className="relative flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
           <div>
-            <h1 className="text-2xl font-bold text-white sm:text-3xl">
-              {t("dash.welcome", { name: firstName })}
+            <p className="mb-1.5 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.22em] text-primary/80">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-primary/50 animate-led-ping" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success shadow-[0_0_8px_rgba(16,185,129,0.9)]" />
+              </span>
+              {t("dash.overline")}
+            </p>
+            <h1 className="text-2xl font-extrabold tracking-tight sm:text-4xl">
+              <span className="text-white">{t("dash.welcomePre", { name: firstName })}</span>{" "}
+              <span className="text-gradient-animated">{firstName}</span>
             </h1>
-            <p className="mt-1.5 max-w-xl text-sm text-muted">{t("dash.subtitle")}</p>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted">
+              {t("dash.subtitle")}
+            </p>
           </div>
           <Link to="/upload" className="btn-accent shrink-0 self-start sm:self-auto">
             <Plus className="h-4 w-4" />

@@ -20,13 +20,14 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-border rounded-full;
+    @apply rounded-full bg-border;
     border: 2px solid transparent;
     background-clip: padding-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-muted/60;
+    background: rgba(16, 185, 129, 0.5);
     background-clip: padding-box;
+    border: 2px solid transparent;
   }
 }
 
@@ -34,11 +35,35 @@
   .text-gradient {
     @apply bg-gradient-to-r from-primary-400 via-primary to-accent bg-clip-text text-transparent;
   }
+  /* Animated headline gradient */
+  .text-gradient-animated {
+    background: linear-gradient(90deg, #34d399 0%, #10b981 25%, #06b6d4 50%, #34d399 75%);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: gradientX 6s ease infinite;
+  }
+  .text-glow {
+    text-shadow:
+      0 0 18px rgba(16, 185, 129, 0.45),
+      0 0 42px rgba(16, 185, 129, 0.18);
+  }
+  /* Film grain — the signature of high-end dark UIs */
+  .noise::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    pointer-events: none;
+    opacity: 0.032;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
   .bg-ambient {
     background:
-      radial-gradient(700px 360px at 12% -6%, rgba(99, 102, 241, 0.14), transparent 60%),
-      radial-gradient(720px 380px at 88% -10%, rgba(34, 211, 238, 0.12), transparent 60%),
-      radial-gradient(600px 420px at 50% 110%, rgba(79, 70, 229, 0.1), transparent 60%);
+      radial-gradient(900px 480px at 12% -8%, rgba(16, 185, 129, 0.13), transparent 62%),
+      radial-gradient(820px 420px at 92% -12%, rgba(6, 182, 212, 0.1), transparent 60%),
+      radial-gradient(700px 520px at 50% 112%, rgba(5, 150, 105, 0.07), transparent 65%);
   }
   .bg-grid {
     background-image:
@@ -46,26 +71,89 @@
       linear-gradient(to bottom, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
     background-size: 44px 44px;
   }
-  .shimmer-line {
-    background: linear-gradient(
-      90deg,
-      rgba(99, 102, 241, 0) 0%,
-      rgba(99, 102, 241, 0.5) 50%,
-      rgba(34, 211, 238, 0) 100%
-    );
-    background-size: 200% 100%;
+  .bg-dots {
+    background-image: radial-gradient(rgba(148, 163, 184, 0.14) 1px, transparent 1px);
+    background-size: 22px 22px;
   }
+  /* HUD corner brackets — cyber-industrial frame */
+  .hud-frame {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+    background:
+      linear-gradient(#10b981, #10b981) left 10px top 10px / 16px 1.5px,
+      linear-gradient(#10b981, #10b981) left 10px top 10px / 1.5px 16px,
+      linear-gradient(#10b981, #10b981) right 10px top 10px / 16px 1.5px,
+      linear-gradient(#10b981, #10b981) right 10px top 10px / 1.5px 16px,
+      linear-gradient(#06b6d4, #06b6d4) left 10px bottom 10px / 16px 1.5px,
+      linear-gradient(#06b6d4, #06b6d4) left 10px bottom 10px / 1.5px 16px,
+      linear-gradient(#06b6d4, #06b6d4) right 10px bottom 10px / 16px 1.5px,
+      linear-gradient(#06b6d4, #06b6d4) right 10px bottom 10px / 1.5px 16px;
+    background-repeat: no-repeat;
+  }
+  .group:hover > .hud-frame,
+  .hud-always > .hud-frame,
+  .hud-frame.always {
+    opacity: 0.55;
+  }
+  /* Staggered entrance for lists/grids */
+  .stagger > * {
+    animation: fadeIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .stagger > *:nth-child(1) { animation-delay: 0s; }
+  .stagger > *:nth-child(2) { animation-delay: 0.05s; }
+  .stagger > *:nth-child(3) { animation-delay: 0.1s; }
+  .stagger > *:nth-child(4) { animation-delay: 0.15s; }
+  .stagger > *:nth-child(5) { animation-delay: 0.2s; }
+  .stagger > *:nth-child(6) { animation-delay: 0.25s; }
 }
 
 @layer components {
   .card {
-    @apply rounded-2xl border border-border bg-surface/90 p-5 shadow-card backdrop-blur-sm;
+    position: relative;
+    border-radius: 1rem;
+    border: 1px solid rgba(30, 41, 59, 0.9);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, transparent 38%),
+      rgba(19, 23, 34, 0.82);
+    backdrop-filter: blur(12px);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 14px 44px -22px rgba(0, 0, 0, 0.75);
+    padding: 1.25rem;
+    transition:
+      border-color 0.18s ease-in-out,
+      box-shadow 0.18s ease-in-out,
+      transform 0.18s ease-in-out;
   }
   .card-hover {
-    @apply card transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-glow-sm;
+    @apply card;
+  }
+  .card-hover:hover {
+    border-color: rgba(16, 185, 129, 0.35);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 0 0 1px rgba(16, 185, 129, 0.18),
+      0 8px 32px -10px rgba(16, 185, 129, 0.28),
+      0 14px 44px -22px rgba(0, 0, 0, 0.75);
   }
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+    @apply relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-xl px-4 py-2 text-sm font-medium transition-all duration-150 ease-in-out disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+  /* Sheen sweep on hover — premium button detail */
+  .btn::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 40%;
+    transform: translateX(-160%) skewX(-20deg);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+    transition: transform 0.5s ease;
+  }
+  .btn:hover::after {
+    transform: translateX(320%) skewX(-20deg);
   }
   .btn-primary {
     @apply btn bg-gradient-to-r from-primary-600 to-primary text-white shadow-glow-sm hover:-translate-y-0.5 hover:shadow-glow hover:brightness-110 active:translate-y-0;
@@ -74,18 +162,35 @@
     @apply btn bg-gradient-to-r from-accent to-primary-400 text-slate-950 shadow-glow-cyan hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0;
   }
   .btn-secondary {
-    @apply btn bg-surface2 border border-border text-slate-200 hover:bg-border hover:text-white;
+    @apply btn border border-border bg-surface2 text-slate-200 hover:border-primary/40 hover:bg-border hover:text-white;
   }
   .btn-danger {
-    @apply btn bg-danger/10 text-danger border border-danger/30 hover:bg-danger/20 hover:border-danger/50;
+    @apply btn border border-danger/30 bg-danger/10 text-danger hover:border-danger/50 hover:bg-danger/20;
   }
   .input {
-    @apply w-full rounded-xl bg-code/80 border border-border px-3 py-2 text-sm text-slate-100 placeholder:text-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary;
+    @apply w-full rounded-xl border border-border bg-black/40 px-3 py-2 text-sm text-slate-100 placeholder:text-muted/70 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40;
   }
   .label {
-    @apply block text-xs font-medium text-muted uppercase tracking-wider mb-1.5;
+    @apply mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted;
   }
   .nav-pill {
     @apply relative rounded-xl px-3 py-2 text-sm font-medium transition-colors;
+  }
+  /* Pulsing status bar — replaces spinners */
+  .pipeline-bar {
+    @apply relative block h-1 w-full overflow-hidden rounded-full bg-surface2;
+  }
+  .pipeline-bar-fill {
+    @apply absolute inset-y-0 left-0 w-1/4 rounded-full bg-gradient-to-r from-transparent via-primary to-accent animate-shimmer;
+  }
+  /* Status LED with expanding ring */
+  .led {
+    @apply relative flex h-2 w-2;
+  }
+  .led > .led-core {
+    @apply h-2 w-2 rounded-full;
+  }
+  .led > .led-ring {
+    @apply absolute inline-flex h-full w-full rounded-full animate-led-ping;
   }
 }

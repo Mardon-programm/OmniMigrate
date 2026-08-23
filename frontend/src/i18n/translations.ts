@@ -32,6 +32,7 @@ const en = {
     admin: "Admin",
     settings: "Settings",
     logout: "Sign out",
+    systemNominal: "All systems nominal",
     role: {
       admin: "Admin",
       client: "Client",
@@ -84,6 +85,8 @@ const en = {
     resetNoToken: "Invalid or missing reset token.",
     requestNewLink: "Request a new link",
     brandTitle: "Legacy code, modernized. Autonomously.",
+    brandTitlePre: "Legacy code,",
+    brandTitleAccent: "modernized. Autonomously.",
     brandSubtitle:
       "OmniMigrate parses your legacy source with LibCST, refactors it through an AI pipeline, verifies the result in an isolated sandbox and self-heals until it compiles.",
     feature1Title: "AST analysis",
@@ -97,6 +100,8 @@ const en = {
   },
   dash: {
     welcome: "Welcome back, {name}",
+    welcomePre: "Welcome back,",
+    overline: "Migration Command Center",
     engineer: "Engineer",
     subtitle:
       "Autonomous AI-powered legacy code migration and modernization.",
@@ -284,6 +289,10 @@ const en = {
   diff: {
     title: "Unified Diff",
     noDiff: "No diff available yet.",
+    modeSplit: "Split",
+    modeUnified: "Unified",
+    legacy: "Legacy",
+    modernized: "Modernized",
   },
   toast: {
     projectUpdated: "Project updated",
@@ -410,6 +419,7 @@ const ru: Translation = {
     admin: "Админ",
     settings: "Настройки",
     logout: "Выйти",
+    systemNominal: "Все системы в норме",
     role: {
       admin: "Администратор",
       client: "Клиент",
@@ -462,6 +472,8 @@ const ru: Translation = {
     resetNoToken: "Недействительный или отсутствующий токен сброса.",
     requestNewLink: "Запросить новую ссылку",
     brandTitle: "Легаси-код, модернизированный автономно.",
+    brandTitlePre: "Легаси-код,",
+    brandTitleAccent: "модернизированный автономно.",
     brandSubtitle:
       "OmniMigrate разбирает ваш легаси-код с помощью LibCST, рефакторит через AI-конвейер, проверяет результат в изолированной песочнице и самосохраняется до успешной компиляции.",
     feature1Title: "AST-анализ",
@@ -475,6 +487,8 @@ const ru: Translation = {
   },
   dash: {
     welcome: "С возвращением, {name}",
+    welcomePre: "С возвращением,",
+    overline: "Центр управления миграцией",
     engineer: "Инженер",
     subtitle:
       "Автономная AI-миграция и модернизация легаси-кода.",
@@ -663,6 +677,10 @@ const ru: Translation = {
   diff: {
     title: "Unified Diff",
     noDiff: "Диффа пока нет.",
+    modeSplit: "Сплит",
+    modeUnified: "Unified",
+    legacy: "Легаси",
+    modernized: "Модернизировано",
   },
   toast: {
     projectUpdated: "Проект обновлён",
