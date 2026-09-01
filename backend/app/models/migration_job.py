@@ -26,6 +26,12 @@ class JobStatus(StrEnum):
     cancelled = "cancelled"
 
 
+class JobPriority(StrEnum):
+    urgent = "urgent"
+    normal = "normal"
+    bulk = "bulk"
+
+
 class MigrationJob(Base):
     __tablename__ = "migration_jobs"
 
@@ -44,6 +50,12 @@ class MigrationJob(Base):
     self_heal_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     status: Mapped[str] = mapped_column(
         String(32), default=JobStatus.queued.value, index=True, nullable=False
+    )
+    priority: Mapped[str] = mapped_column(
+        String(16),
+        default=JobPriority.normal.value,
+        server_default=JobPriority.normal.value,
+        nullable=False,
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     metrics: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)

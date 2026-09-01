@@ -141,12 +141,14 @@ class JobRepository:
         title: str,
         context_rule: str,
         input_code: str,
+        priority: str = "normal",
     ) -> MigrationJob:
         job = MigrationJob(
             project_id=project_id,
             title=title,
             context_rule=context_rule,
             input_code=input_code,
+            priority=priority,
         )
         self.session.add(job)
         await self.session.flush()

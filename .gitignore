@@ -30,3 +30,6 @@ Thumbs.db
 
 # Runtime / sandbox
 /data/
+
+# Standalone landing repo (own git remote)
+landing_omnimigrate/

@@ -5,6 +5,7 @@ export interface User {
   email: string;
   full_name: string;
   role: UserRole;
+  mfa_enabled: boolean;
 }
 
 export interface TokenResponse {
@@ -12,6 +13,11 @@ export interface TokenResponse {
   refresh_token: string;
   token_type: string;
   expires_in: number;
+}
+
+export interface MfaSetupResponse {
+  secret: string;
+  otpauth_uri: string;
 }
 
 export interface Project {
@@ -32,6 +38,7 @@ export interface JobStatusRead {
   project_id: number;
   title: string;
   status: JobStatus;
+  priority: JobPriority;
   self_heal_attempts: number;
   error_message: string | null;
   progress: number | null;
@@ -39,6 +46,8 @@ export interface JobStatusRead {
   created_at: string;
   updated_at: string;
 }
+
+export type JobPriority = "urgent" | "normal" | "bulk";
 
 export type JobStatus =
   | "queued"
@@ -65,6 +74,7 @@ export interface Job {
   title: string;
   context_rule: string;
   status: JobStatus;
+  priority: JobPriority;
   input_code: string;
   output_code: string | null;
   diff: string | null;

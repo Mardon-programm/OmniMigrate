@@ -26,11 +26,20 @@ async def _shutdown(ctx: dict) -> None:
 
 
 class WorkerSettings:
-    """Arq configuration used by `arq app.core.worker.WorkerSettings`."""
+    """Arq configuration used by `arq app.core.worker.WorkerSettings`.
+
+    Listens to all priority queues; arq drains them in the order listed,
+    so urgent jobs are picked up before normal/bulk.
+    """
 
     functions: ClassVar[list[str]] = [
         "app.services.migration_service.run_migration_job",
         "app.services.orchestrator.run_autonomous_migration_job",
+    ]
+    queues: ClassVar[list[str]] = [
+        "omnimigrate:urgent",
+        "omnimigrate:normal",
+        "omnimigrate:bulk",
     ]
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
     on_startup = _startup

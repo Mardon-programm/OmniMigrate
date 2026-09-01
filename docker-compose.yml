@@ -74,7 +74,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: ["arq", "app.core.worker.WorkerSettings"]
+    command: ["python", "-m", "app.worker_runner"]
     volumes:
       - workspace_data:/data
     networks:

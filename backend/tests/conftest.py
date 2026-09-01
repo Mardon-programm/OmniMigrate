@@ -126,7 +126,7 @@ _real_enqueue_migration = _queue_mod.enqueue_migration_job
 _real_enqueue_autonomous = _queue_mod.enqueue_autonomous_migration
 
 
-async def _noop_enqueue_migration(job_id: int) -> None:
+async def _noop_enqueue_migration(job_id: int, priority: str | None = None) -> None:
     pass
 
 
@@ -140,6 +140,7 @@ async def _noop_enqueue_autonomous(
     base_branch: str = "main",
     title: str | None = None,
     body: str | None = None,
+    priority: str | None = None,
 ) -> None:
     pass
 

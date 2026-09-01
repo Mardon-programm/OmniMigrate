@@ -1,0 +1,112 @@
+# Default values for omnimigrate.
+# Postgres/Redis are expected EXTERNAL (managed or air-gapped cluster-internal).
+
+image:
+  backend:
+    repository: ghcr.io/your-org/omnimigrate-backend
+    tag: "1.0.0"
+  frontend:
+    repository: ghcr.io/your-org/omnimigrate-frontend
+    tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# --- External dependencies ---
+externalPostgres:
+  host: postgres.data.svc.cluster.local
+  port: 5432
+  database: omnimigrate
+  # Secret must contain key POSTGRES_PASSWORD (or provide existingSecret)
+  auth:
+    existingSecret: ""
+    passwordKey: password
+    username: omnimigrate
+
+externalRedis:
+  host: redis.data.svc.cluster.local
+  port: 6379
+
+# --- Application secrets ---
+# Provide via existing secret in production. Keys expected:
+#   SECRET_KEY, ENCRYPTION_KEY, STRIPE_SECRET_KEY (opt), OPENAI_API_KEY (opt)
+existingSecret: ""
+
+config:
+  environment: production
+  llmProvider: local-rule-engine   # openai | anthropic | local-rule-engine
+  frontendOrigin: https://omnimigrate.example.com
+  corsOrigins: "https://omnimigrate.example.com"
+
+backend:
+  replicaCount: 2
+  port: 8003
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "1", memory: 1Gi }
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 75
+
+worker:
+  replicaCount: 2
+  resources:
+    requests: { cpu: 500m, memory: 768Mi }
+    limits: { cpu: "2", memory: 2Gi }
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+  concurrency: 4
+  # Sandbox hard limits applied to migration subprocesses
+  sandboxTimeoutSeconds: 300
+
+frontend:
+  replicaCount: 2
+  port: 80
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+
+service:
+  type: ClusterIP
+  backendPort: 8003
+  frontendPort: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  host: omnimigrate.example.com
+  tls:
+    enabled: true
+    secretName: omnimigrate-tls
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: 8m
+
+migrations:
+  enabled: true          # helm hook pre-upgrade: alembic upgrade head
+
+serviceAccount:
+  create: true
+  annotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop: ["ALL"]
+
+nodeSelector: {}
+tolerations: {}
+affinity: {}

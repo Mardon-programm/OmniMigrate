@@ -58,12 +58,13 @@ async def submit_migration_job(
         title=payload.title,
         context_rule=payload.context_rule or DEFAULT_CONTEXT_RULE,
         input_code=payload.input_code,
+        priority=payload.priority.value,
     )
     await session.commit()
     await session.refresh(job)
 
     try:
-        await enqueue_migration_job(job.id)
+        await enqueue_migration_job(job.id, priority=payload.priority.value)
     except Exception:
         job.status = JobStatus.failed.value
         job.error_message = "Failed to enqueue job: task queue unavailable."
@@ -103,6 +104,7 @@ async def list_jobs(
                 project_id=job.project_id,
                 title=job.title,
                 status=live["status"] if live else job.status,
+                priority=job.priority,
                 self_heal_attempts=job.self_heal_attempts,
                 error_message=job.error_message,
                 progress=int(live.get("progress", 0)) if live else None,
@@ -131,6 +133,7 @@ async def get_job_status(job_id: int, session: DbSession, user: CurrentUser) -> 
         project_id=job.project_id,
         title=job.title,
         status=live["status"] if live else job.status,
+        priority=job.priority,
         self_heal_attempts=job.self_heal_attempts,
         error_message=job.error_message,
         progress=int(live.get("progress", 0)) if live else None,

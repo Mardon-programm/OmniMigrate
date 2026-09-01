@@ -5,6 +5,15 @@ class TestWorkerSettings:
         assert "app.services.migration_service.run_migration_job" in WorkerSettings.functions
         assert "app.services.orchestrator.run_autonomous_migration_job" in WorkerSettings.functions
 
+    def test_priority_queues_listed(self):
+        from app.core.worker import WorkerSettings
+
+        assert WorkerSettings.queues == [
+            "omnimigrate:urgent",
+            "omnimigrate:normal",
+            "omnimigrate:bulk",
+        ]
+
     def test_cron_jobs_defined(self):
         from app.core.worker import cron_jobs
 
@@ -22,15 +31,27 @@ class TestWorkerSettings:
             assert session is not None
 
 
+class TestQueueNames:
+    def test_queue_name_mapping(self):
+        from app.services.queue import DEFAULT_QUEUE, queue_name
+
+        assert queue_name("urgent") == "omnimigrate:urgent"
+        assert queue_name("normal") == "omnimigrate:normal"
+        assert queue_name("bulk") == "omnimigrate:bulk"
+        assert queue_name(None) == "omnimigrate:normal"
+        assert queue_name("bogus") == "omnimigrate:normal"
+        assert DEFAULT_QUEUE == "omnimigrate:normal"
+
+
 class TestQueue:
-    async def test_enqueue_migration_job(self, monkeypatch):
+    async def test_enqueue_migration_job_default_priority(self, monkeypatch):
         from app.services import queue as queue_module
 
         calls = []
 
         class FakePool:
-            async def enqueue_job(self, fn, job_id):
-                calls.append((fn, job_id))
+            async def enqueue_job(self, fn, job_id, **kwargs):
+                calls.append((fn, job_id, kwargs))
 
             async def aclose(self):
                 calls.append("closed")
@@ -41,9 +62,32 @@ class TestQueue:
         monkeypatch.setattr(queue_module, "create_pool", _fake_create_pool)
         await queue_module.enqueue_migration_job(123)
         assert calls == [
-            ("app.services.migration_service.run_migration_job", 123),
+            (
+                "app.services.migration_service.run_migration_job",
+                123,
+                {"_queue_name": "omnimigrate:normal"},
+            ),
             "closed",
         ]
+
+    async def test_enqueue_migration_job_urgent(self, monkeypatch):
+        from app.services import queue as queue_module
+
+        calls = []
+
+        class FakePool:
+            async def enqueue_job(self, fn, job_id, **kwargs):
+                calls.append((fn, job_id, kwargs))
+
+            async def aclose(self):
+                calls.append("closed")
+
+        async def _fake_create_pool(_settings):
+            return FakePool()
+
+        monkeypatch.setattr(queue_module, "create_pool", _fake_create_pool)
+        await queue_module.enqueue_migration_job(5, priority="urgent")
+        assert calls[0][2] == {"_queue_name": "omnimigrate:urgent"}
 
     async def test_enqueue_autonomous_migration(self, monkeypatch):
         from app.services import queue as queue_module
@@ -51,8 +95,8 @@ class TestQueue:
         calls = []
 
         class FakePool:
-            async def enqueue_job(self, *args):
-                calls.append(args)
+            async def enqueue_job(self, *args, **kwargs):
+                calls.append((args, kwargs))
 
             async def aclose(self):
                 calls.append("closed")
@@ -69,7 +113,10 @@ class TestQueue:
             github_token="token",
             context_rule=None,
             base_branch="main",
+            priority="bulk",
         )
-        assert calls[0][0] == "app.services.orchestrator.run_autonomous_migration_job"
-        assert calls[0][1] == 7
+        args, kwargs = calls[0]
+        assert args[0] == "app.services.orchestrator.run_autonomous_migration_job"
+        assert args[1] == 7
+        assert kwargs["_queue_name"] == "omnimigrate:bulk"
         assert calls[-1] == "closed"

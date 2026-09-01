@@ -100,6 +100,7 @@ export function Navbar() {
                 </div>
                 <NavLink
                   to="/settings"
+                  aria-label={t("nav.settings")}
                   className="rounded-lg p-2 text-muted transition-colors hover:bg-surface2 hover:text-primary"
                   title={t("nav.settings")}
                 >
@@ -107,6 +108,7 @@ export function Navbar() {
                 </NavLink>
                 <button
                   onClick={handleLogout}
+                  aria-label={t("nav.logout")}
                   className="rounded-lg p-2 text-muted transition-colors hover:bg-surface2 hover:text-danger"
                   title={t("nav.logout")}
                 >

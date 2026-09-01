@@ -2,12 +2,15 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.models.migration_job import JobPriority
+
 
 class JobSubmitRequest(BaseModel):
     project_id: int
     title: str = Field(min_length=1, max_length=255)
     context_rule: str | None = Field(default=None, max_length=10000)
     input_code: str = Field(min_length=1, max_length=2_000_000)
+    priority: JobPriority = JobPriority.normal
 
 
 class JobCreate(BaseModel):
@@ -15,6 +18,7 @@ class JobCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     context_rule: str | None = None
     input_code: str = Field(min_length=1)
+    priority: JobPriority = JobPriority.normal
 
 
 class JobUpdate(BaseModel):
@@ -39,6 +43,7 @@ class JobStatusRead(BaseModel):
     project_id: int
     title: str
     status: str
+    priority: str = JobPriority.normal.value
     self_heal_attempts: int
     error_message: str | None
     progress: int | None = None
@@ -53,6 +58,7 @@ class JobRead(BaseModel):
     title: str
     context_rule: str
     status: str
+    priority: str = JobPriority.normal.value
     input_code: str
     output_code: str | None
     diff: str | None

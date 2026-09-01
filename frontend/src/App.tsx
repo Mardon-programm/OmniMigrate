@@ -36,9 +36,15 @@ function Shell() {
       />
       <div className="pointer-events-none fixed inset-x-0 top-0 h-24 bg-gradient-to-b from-primary/10 to-transparent" aria-hidden="true" />
       <div className="noise" aria-hidden="true" />
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[110] focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-slate-950"
+      >
+        Skip to content
+      </a>
       <div className="relative">
         {user && <Navbar />}
-        <main>
+        <main id="main-content">
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />

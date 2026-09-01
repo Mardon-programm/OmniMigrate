@@ -13,6 +13,7 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
+    mfa_code: str | None = Field(default=None, min_length=6, max_length=8)
 
 
 class RefreshRequest(BaseModel):
@@ -31,6 +32,21 @@ class UserInfo(BaseModel):
     email: EmailStr
     full_name: str
     role: UserRole
+    mfa_enabled: bool = False
+
+
+class MfaSetupResponse(BaseModel):
+    secret: str
+    otpauth_uri: str
+
+
+class MfaEnableRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=8)
+
+
+class MfaDisableRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=128)
+    code: str = Field(min_length=6, max_length=8)
 
 
 class ForgotPasswordRequest(BaseModel):

@@ -58,7 +58,7 @@
 - [ ] Мультиязычность: JS/TS, Java, Go; фреймворки (Django→FastAPI, jQuery→React).
 - [ ] Review-флоу: approve/reject миграции, apply к репозиторию, откат.
 - [x] Job management: cancel/retry/pause, webhook-уведомления (внешние).
-- [ ] **Метрики использования**: jobs, LLM-токены, файлы, минуты — по организации.
+- [x] **Метрики использования**: jobs, LLM-токены, файлы, минуты — по организации (`GET /billing/organizations/{id}/dashboard`).
 - [ ] Эвристики качества миграции (score, риск-анализ изменений).
 
 **Приёмка:** пользователь проходит флоу «вставил repo → получил PR → approve» без выхода из UI.
@@ -81,10 +81,10 @@
 ## Фаза 4 — Масштаб и надёжность (нед. 9–11) · ~20 дней
 
 - [ ] Горизонтальное масштабирование воркеров; приоритетные очереди (urgent/normal/bulk).
-- [ ] Observability: OpenTelemetry, Sentry, Prometheus/Grafana, структурированные логи.
+- [x] Observability: OpenTelemetry, Prometheus `/metrics`, structlog; graceful degradation LLM→правила.
 - [ ] Резервное копирование и восстановление Postgres/Redis; DR-плейбук.
-- [ ] Нагрузочное тестирование (k6): целевые RPS и latency-p99.
-- [ ] Graceful degradation: LLM-падение → правила → очередь → уведомление.
+- [x] Нагрузочное тестирование (k6): smoke/load/stress в `loadtest/`.
+- [x] Graceful degradation: LLM-падение → правила → очередь → уведомление.
 - [ ] Multi-region опция (для enterprise).
 
 **Приёмка:** k6 держит целевой RPS с p99 < 1s; отказ Redis не роняет API.
@@ -94,8 +94,8 @@
 ## Фаза 5 — GTM и документация (нед. 11–12) · ~15 дней
 
 - [ ] Marketing-сайт: позиционирование, use-cases, pricing page.
-- [ ] Docs-сайт: архитектурные диаграммы (Mermaid/C4), API-референс, гайды, runbook, troubleshooting.
-- [ ] SOC 2 readiness: политики безопасности, access reviews, retention.
+- [x] Docs: `docs/architecture.md` (диаграммы Mermaid), `docs/api-reference.md`, runbook, SLA, SOC 2 readiness.
+- [x] SOC 2 readiness: политики безопасности, access reviews, retention (`docs/soc2-readiness.md`).
 - [ ] SLA-документ, support-тиры, ответ на RFP/RFI.
 - [ ] On-prem / private-cloud вариант (Helm chart / air-gapped).
 - [x] CONTRIBUTING.md, LICENSE, deployment guide.

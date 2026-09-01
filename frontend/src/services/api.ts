@@ -5,7 +5,9 @@ import type {
   DiffPayload,
   Finding,
   Job,
+  JobPriority,
   JobStatusRead,
+  MfaSetupResponse,
   OrgMember,
   Organization,
   Plan,
@@ -108,10 +110,14 @@ async function unwrap<T>(promise: Promise<{ data: T }>): Promise<T> {
 
 export const api = {
   // Auth
-  login: (email: string, password: string) =>
-    unwrap(client.post<TokenResponse>("/auth/login", { email, password })),
+  login: (email: string, password: string, mfa_code?: string) =>
+    unwrap(client.post<TokenResponse>("/auth/login", { email, password, mfa_code })),
   register: (email: string, password: string, full_name: string) =>
     unwrap(client.post<TokenResponse>("/auth/register", { email, password, full_name })),
+  mfaSetup: () => unwrap(client.post<MfaSetupResponse>("/auth/mfa/setup")),
+  mfaEnable: (code: string) => unwrap(client.post<{ mfa_enabled: boolean }>("/auth/mfa/enable", { code })),
+  mfaDisable: (password: string, code: string) =>
+    unwrap(client.post<{ mfa_enabled: boolean }>("/auth/mfa/disable", { password, code })),
   me: () => unwrap(client.get<User>("/auth/me")),
 
   // Projects
@@ -144,6 +150,7 @@ export const api = {
     title: string;
     context_rule?: string;
     input_code: string;
+    priority?: JobPriority;
   }) => unwrap(client.post<Job>("/jobs", data)),
   analyze: (code: string, filename?: string) =>
     unwrap(

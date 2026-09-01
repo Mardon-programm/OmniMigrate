@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowRightLeft, Lock, Mail, ShieldCheck } from "lucide-react";
+import { ArrowRightLeft, Lock, Mail, ShieldCheck, Smartphone } from "lucide-react";
 
 import { AuthShell } from "@/components/AuthShell";
 import { useAuth } from "@/context/AuthContext";
@@ -16,6 +16,8 @@ export function Login() {
   const location = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaRequired, setMfaRequired] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const from = (location.state as { from?: string })?.from ?? "/";
@@ -24,13 +26,24 @@ export function Login() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await login(email, password);
+      await login(email, password, mfaRequired ? mfaCode : undefined);
       navigate(from, { replace: true });
     } catch (err) {
+      if (
+        err instanceof ApiError &&
+        err.status === 401 &&
+        /mfa code required/i.test(err.message)
+      ) {
+        setMfaRequired(true);
+        toastError(t("auth.mfaCodeRequired"));
+        return;
+      }
       const message =
         err instanceof ApiError
           ? err.status === 401
-            ? t("auth.loginInvalid")
+            ? /invalid mfa/i.test(err.message)
+              ? t("auth.mfaInvalid")
+              : t("auth.loginInvalid")
             : err.message
           : t("auth.loginFailed");
       toastError(message);
@@ -93,8 +106,33 @@ export function Login() {
           </Link>
         </div>
 
+        {mfaRequired && (
+          <div>
+            <label className="label" htmlFor="mfa-code">
+              {t("auth.mfaCode")}
+            </label>
+            <div className="relative">
+              <Smartphone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
+              <input
+                id="mfa-code"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoFocus
+                required
+                maxLength={6}
+                className="input pl-9 font-mono tracking-[0.3em]"
+                placeholder="000000"
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
+              />
+            </div>
+            <p className="mt-1.5 text-xs text-muted">{t("auth.mfaHint")}</p>
+          </div>
+        )}
+
         <button type="submit" disabled={submitting} className="btn-primary w-full py-2.5">
-          {submitting ? t("auth.signingIn") : t("auth.signIn")}
+          {submitting ? t("auth.signingIn") : mfaRequired ? t("auth.verifyCode") : t("auth.signIn")}
         </button>
 
         <p className="flex items-center justify-center gap-1.5 text-xs text-muted">

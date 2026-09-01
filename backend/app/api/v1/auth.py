@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
+import pyotp
 from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select
 
@@ -20,6 +21,9 @@ from app.schemas.auth import (
     ForgotPasswordRequest,
     LoginRequest,
     LogoutRequest,
+    MfaDisableRequest,
+    MfaEnableRequest,
+    MfaSetupResponse,
     RefreshRequest,
     RegisterRequest,
     ResetPasswordRequest,
@@ -64,9 +68,17 @@ async def register(payload: RegisterRequest, session: DbSession) -> TokenRespons
     )
 
 
+def _otpauth_uri(email: str, secret: str) -> str:
+    return pyotp.totp.TOTP(secret).provisioning_uri(name=email, issuer_name="OmniMigrate")
+
+
 @router.post("/login", response_model=TokenResponse)
 async def login(payload: LoginRequest, session: DbSession) -> TokenResponse:
-    """Authenticate a user and return JWT access/refresh tokens."""
+    """Authenticate a user and return JWT access/refresh tokens.
+
+    When TOTP MFA is enabled the request must include `mfa_code`;
+    otherwise responds 401 with code "mfa_required".
+    """
     result = await session.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
     if user is None or not verify_password(payload.password, user.hashed_password):
@@ -76,6 +88,20 @@ async def login(payload: LoginRequest, session: DbSession) -> TokenResponse:
         )
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled.")
+
+    if user.mfa_enabled and user.mfa_secret:
+        if not payload.mfa_code:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="MFA code required.",
+                headers={"X-MFA-Required": "true"},
+            )
+        if not pyotp.TOTP(user.mfa_secret).verify(payload.mfa_code, valid_window=1):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid MFA code.",
+                headers={"X-MFA-Required": "true"},
+            )
 
     return TokenResponse(
         access_token=create_access_token(user.id, user.role.value),
@@ -116,7 +142,71 @@ async def refresh(payload: RefreshRequest, session: DbSession) -> TokenResponse:
 @router.get("/me", response_model=UserInfo)
 async def me(user: CurrentUser) -> UserInfo:
     """Return the currently authenticated user."""
-    return UserInfo(id=user.id, email=user.email, full_name=user.full_name, role=user.role)
+    return UserInfo(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        role=user.role,
+        mfa_enabled=user.mfa_enabled,
+    )
+
+
+@router.post("/mfa/setup", response_model=MfaSetupResponse)
+async def mfa_setup(user: CurrentUser, session: DbSession) -> MfaSetupResponse:
+    """Generate a TOTP secret for the user. Idempotent until enabled."""
+    if user.mfa_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="MFA is already enabled. Disable it first.",
+        )
+    secret = pyotp.random_base32()
+    user.mfa_secret = secret
+    await session.commit()
+    return MfaSetupResponse(secret=secret, otpauth_uri=_otpauth_uri(user.email, secret))
+
+
+@router.post("/mfa/enable", response_model=UserInfo)
+async def mfa_enable(payload: MfaEnableRequest, user: CurrentUser, session: DbSession) -> UserInfo:
+    """Confirm a TOTP code to activate MFA."""
+    if not user.mfa_secret:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Call /auth/mfa/setup first.",
+        )
+    if not pyotp.TOTP(user.mfa_secret).verify(payload.code, valid_window=1):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid verification code."
+        )
+    user.mfa_enabled = True
+    await session.commit()
+    return UserInfo(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        role=user.role,
+        mfa_enabled=True,
+    )
+
+
+@router.post("/mfa/disable", response_model=UserInfo)
+async def mfa_disable(
+    payload: MfaDisableRequest, user: CurrentUser, session: DbSession
+) -> UserInfo:
+    """Disable MFA; requires password confirmation plus a valid current code."""
+    if not verify_password(payload.password, user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Incorrect password.")
+    if not user.mfa_secret or not pyotp.TOTP(user.mfa_secret).verify(payload.code, valid_window=1):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid MFA code.")
+    user.mfa_enabled = False
+    user.mfa_secret = None
+    await session.commit()
+    return UserInfo(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        role=user.role,
+        mfa_enabled=False,
+    )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

@@ -36,6 +36,7 @@ export function CodeUpload() {
   const [contextRule, setContextRule] = useState("");
   const [code, setCode] = useState("");
   const [filename, setFilename] = useState("source.py");
+  const [priority, setPriority] = useState<"urgent" | "normal" | "bulk">("normal");
 
   const [analyzing, setAnalyzing] = useState(false);
   const [findings, setFindings] = useState<Finding[] | null>(null);
@@ -98,6 +99,7 @@ export function CodeUpload() {
         title: title.trim(),
         context_rule: contextRule.trim() || undefined,
         input_code: code,
+        priority,
       });
       toast.success(t("upload.toast.submitted"));
       navigate(`/jobs/${job.id}`);
@@ -167,6 +169,25 @@ export function CodeUpload() {
                   placeholder={t("upload.jobTitlePlaceholder")}
                 />
               </div>
+            </div>
+
+            <div className="max-w-[220px]">
+              <label className="label" htmlFor="u-priority">
+                {t("upload.priority")}
+              </label>
+              <select
+                id="u-priority"
+                className="input"
+                value={priority}
+                onChange={(e) =>
+                  setPriority(e.target.value as "urgent" | "normal" | "bulk")
+                }
+              >
+                <option value="urgent">{t("upload.priorityUrgent")}</option>
+                <option value="normal">{t("upload.priorityNormal")}</option>
+                <option value="bulk">{t("upload.priorityBulk")}</option>
+              </select>
+              <p className="mt-1 text-xs text-muted">{t("upload.priorityHint")}</p>
             </div>
 
             <div>
