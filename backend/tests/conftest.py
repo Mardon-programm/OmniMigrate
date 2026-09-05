@@ -141,6 +141,7 @@ async def _noop_enqueue_autonomous(
     title: str | None = None,
     body: str | None = None,
     priority: str | None = None,
+    target_files: list[str] | None = None,
 ) -> None:
     pass
 

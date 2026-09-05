@@ -5,13 +5,20 @@ class AutonomousRunRequest(BaseModel):
     """Start a full git + test-driven autonomous migration."""
 
     repo_url: str = Field(min_length=8, max_length=512)
-    repo_owner: str = Field(min_length=1, max_length=128)
-    repo_name: str = Field(min_length=1, max_length=128)
-    github_token: str = Field(min_length=1, max_length=256)
+    repo_owner: str | None = Field(default=None, max_length=128)
+    repo_name: str | None = Field(default=None, max_length=128)
+    github_token: str | None = Field(default=None, max_length=256)
     context_rule: str | None = Field(default=None, max_length=10000)
     base_branch: str = Field(default="main", min_length=1, max_length=128)
     title: str | None = Field(default=None, max_length=255)
     body: str | None = Field(default=None, max_length=10000)
+    target_files: list[str] | None = Field(
+        default=None,
+        description=(
+            "Optional list of relative file paths to migrate. If omitted, the "
+            "entire repository is processed."
+        ),
+    )
 
 
 class AutonomousRunResponse(BaseModel):

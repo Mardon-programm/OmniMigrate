@@ -166,6 +166,61 @@ class TestFullPipeline:
                 repo_name="legacy",
             )
 
+    async def test_fails_when_target_file_missing(self, local_github):
+        """A typo'd target path must fail with a clear message, not silently skip."""
+        orchestrator = AutonomousMigrationOrchestrator()
+        with pytest.raises(GitOperationError) as exc_info:
+            await orchestrator.execute_full_pipeline(
+                repo_url=local_github,
+                github_token="fake-token",
+                repo_owner="acme",
+                repo_name="legacy",
+                base_branch="main",
+                target_files=["does-not-exist.py"],
+            )
+        message = str(exc_info.value)
+        assert "does-not-exist.py" in message
+        assert "not found" in message
+
+    async def test_succeeds_with_valid_target_file(self, local_github):
+        """Migrating a file that does exist in the repo should still succeed."""
+        orchestrator = AutonomousMigrationOrchestrator()
+        result = await orchestrator.execute_full_pipeline(
+            repo_url=local_github,
+            github_token="fake-token",
+            repo_owner="acme",
+            repo_name="legacy",
+            base_branch="main",
+            target_files=["legacy.py"],
+        )
+        assert result.pull_request_url == "https://github.com/acme/legacy/pull/7"
+        assert [c.rel_path for c in result.changed_files] == ["legacy.py"]
+
+    async def test_fails_cleanly_when_nothing_to_migrate(self, monkeypatch, legacy_repo):
+        """A repo with nothing modernizable must fail cleanly, not crash in git commit."""
+        _repo_dir, remote = legacy_repo
+        modern_dir = Path(legacy_repo[0]).parent / "modern"
+        modern_dir.mkdir(exist_ok=True)
+        (modern_dir / "clean.py").write_text("def f(x):\n    return range(x)\n", encoding="utf-8")
+
+        def _clone_per_modern(repo_url, branch="main", depth=1, extra_args=None):
+            return str(modern_dir)
+
+        monkeypatch.setattr(
+            "app.services.git_sandbox.GitSandboxService.clone_repository", _clone_per_modern
+        )
+        orchestrator = AutonomousMigrationOrchestrator()
+        with pytest.raises(GitOperationError) as exc_info:
+            await orchestrator.execute_full_pipeline(
+                repo_url=remote,
+                github_token="fake-token",
+                repo_owner="acme",
+                repo_name="legacy",
+                base_branch="main",
+            )
+        message = str(exc_info.value)
+        assert "No files could be migrated" in message
+
 
 class TestWorkerEntrypoint:
     async def test_run_autonomous_job_success(self, local_github, db_session):
@@ -277,6 +332,41 @@ class TestDirectoryWalkers:
             str(tmp_path), refactor, ""
         )
         assert changes == []
+
+    async def test_process_dir_async_with_target_files(self, tmp_path):
+        (tmp_path / "a.py").write_text("for i in xrange(1):\n    pass\n", encoding="utf-8")
+        (tmp_path / "b.py").write_text("for i in xrange(2):\n    pass\n", encoding="utf-8")
+        (tmp_path / "c.py").write_text("for i in xrange(3):\n    pass\n", encoding="utf-8")
+
+        async def refactor(code, rule):
+            return code.replace("xrange", "range")
+
+        changes = await AutonomousMigrationOrchestrator._process_dir_async(
+            str(tmp_path), refactor, "", target_files=["a.py", "c.py"]
+        )
+        paths = [c.rel_path for c in changes]
+        assert paths == ["a.py", "c.py"]
+
+    async def test_process_dir_async_target_files_ignores_missing(self, tmp_path):
+        (tmp_path / "a.py").write_text("for i in xrange(1):\n    pass\n", encoding="utf-8")
+
+        async def refactor(code, rule):
+            return code.replace("xrange", "range")
+
+        changes = await AutonomousMigrationOrchestrator._process_dir_async(
+            str(tmp_path), refactor, "", target_files=["a.py", "does-not-exist.py", "b.txt"]
+        )
+        assert [c.rel_path for c in changes] == ["a.py"]
+
+    async def test_missing_target_files(self, tmp_path):
+        (tmp_path / "a.py").write_text("x=1\n", encoding="utf-8")
+        (tmp_path / "sub").mkdir()
+        (tmp_path / "sub" / "b.py").write_text("x=1\n", encoding="utf-8")
+        missing = AutonomousMigrationOrchestrator._missing_target_files(
+            str(tmp_path),
+            ["a.py", "sub/b.py", "src/app.py", "docs/README.md", "not.py"],
+        )
+        assert missing == ["src/app.py", "docs/README.md", "not.py"]
 
     async def test_heal_dir_async(self, tmp_path):
         (tmp_path / "mod.py").write_text("for i in xrange(3):\n    pass\n", encoding="utf-8")

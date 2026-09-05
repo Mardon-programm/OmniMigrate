@@ -150,13 +150,14 @@ class AutonomousMigrationOrchestrator:
     async def execute_full_pipeline(
         self,
         repo_url: str,
-        github_token: str,
+        github_token: str | None,
         repo_owner: str,
         repo_name: str,
         context_rule: str | None = None,
         base_branch: str = "main",
         title: str | None = None,
         body: str | None = None,
+        target_files: list[str] | None = None,
     ) -> PipelineResult:
         """Run the entire pipeline and return the result with the PR URL."""
         rule = context_rule or DEFAULT_CONTEXT_RULE
@@ -180,16 +181,51 @@ class AutonomousMigrationOrchestrator:
                 GitSandboxService.clone_repository, repo_url, base_branch
             )
 
+            # The requested branch may not exist (e.g. the repo default is
+            # `master`, not `main`). If the clone fell back to the repo's default
+            # branch, use that as the PR base so the PR is created against a real
+            # branch instead of a non-existent one.
+            effective_base = (
+                base_branch
+                if base_branch in GitSandboxService.current_branches(project_dir)
+                else GitSandboxService.default_branch(project_dir)
+            )
+
+            # 1b. Validate requested target files exist. A typo in a path (e.g.
+            # `src/app.py` when the real file is `app.py`) would otherwise be
+            # silently skipped, producing a misleading half-migrated PR.
+            if target_files:
+                missing = self._missing_target_files(project_dir, target_files)
+                if missing:
+                    listed = ", ".join(missing)
+                    raise GitOperationError(
+                        "Requested files were not found in the repository: "
+                        f"{listed}. Check the relative paths (all target paths must "
+                        "match files exactly; leave empty to migrate the whole repo)."
+                    )
+
             # 2. Baseline tests.
             await self._report(20, "baseline", "Running baseline test suite")
             baseline = await asyncio.to_thread(GitSandboxService.run_tests, project_dir)
             log(f"Baseline tests: {'PASS' if baseline.success else 'FAIL'}")
 
-            # 3. Refactor the whole tree.
+            # 3. Refactor the whole tree (or the requested target files only).
             await self._report(40, "refactor", "Refactoring Python sources")
             refactor_fn = self._make_refactor_fn(rule)
-            changed_files = await self._process_dir_async(project_dir, refactor_fn, rule)
+            changed_files = await self._process_dir_async(
+                project_dir, refactor_fn, rule, target_files=target_files
+            )
             log(f"Refactored {len(changed_files)} file(s)")
+
+            if not changed_files:
+                raise GitOperationError(
+                    "No files could be migrated. The repository contains no "
+                    "legacy patterns that the current provider can transform "
+                    "(OPENAI_API_KEY is not set, so the local rule engine is in "
+                    "use). Add an OPENAI_API_KEY to enable LLM-based migration, "
+                    "or verify the repository actually contains Python source "
+                    "with modernizable legacy syntax."
+                )
 
             # 4. Post-refactor tests with self-healing.
             await self._report(60, "verify", "Re-running tests after refactor")
@@ -221,6 +257,11 @@ class AutonomousMigrationOrchestrator:
             body = body or self._default_body(changed_files)
             commit_message = self._default_commit_message(changed_files)
 
+            if not github_token:
+                raise GitOperationError(
+                    "A GitHub token is required to push the refactored branch and open a PR."
+                )
+
             await asyncio.to_thread(
                 GitHubIntegrationService.commit_and_push,
                 project_dir,
@@ -232,7 +273,7 @@ class AutonomousMigrationOrchestrator:
             )
             github = GitHubIntegrationService(github_token)
             pr = await github.create_pull_request(
-                repo_owner, repo_name, title, head=branch, base=base_branch, body=body
+                repo_owner, repo_name, title, head=branch, base=effective_base, body=body
             )
             pr_url = pr["html_url"]
             pr_number = pr["number"]
@@ -257,12 +298,38 @@ class AutonomousMigrationOrchestrator:
     # --- Async directory walkers -------------------------------------------
 
     @staticmethod
+    def _missing_target_files(project_dir: str, target_files: list[str]) -> list[str]:
+        root = Path(project_dir)
+        missing: list[str] = []
+        for rel in target_files:
+            clean = rel.replace("\\", "/").lstrip("./")
+            p = root / clean
+            if not (p.is_file() and p.suffix == ".py"):
+                missing.append(clean)
+        return missing
+
+    @staticmethod
     async def _process_dir_async(
-        project_dir: str, refactor_fn, context_rule: str
+        project_dir: str,
+        refactor_fn,
+        context_rule: str,
+        target_files: list[str] | None = None,
     ) -> list[FileChange]:
         root = Path(project_dir)
         changes: list[FileChange] = []
-        paths = await asyncio.to_thread(lambda: sorted(root.rglob("*.py")))
+
+        if target_files:
+            candidates: list[Path] = []
+            for rel in target_files:
+                clean = rel.replace("\\", "/").lstrip("./")
+                p = root / clean
+                if p.is_file() and p.suffix == ".py":
+                    candidates.append(p)
+            # Preserve a deterministic, sorted walk over just the requested files.
+            paths = sorted(set(candidates), key=lambda p: p.relative_to(root).as_posix())
+        else:
+            paths = await asyncio.to_thread(lambda: sorted(root.rglob("*.py")))
+
         for path in paths:
             rel = path.relative_to(root).as_posix()
             if GitSandboxService._is_excluded(rel):
@@ -367,11 +434,12 @@ async def run_autonomous_migration_job(
     repo_url: str,
     repo_owner: str,
     repo_name: str,
-    github_token: str,
+    github_token: str | None,
     context_rule: str | None,
     base_branch: str,
     title: str | None = None,
     body: str | None = None,
+    target_files: list[str] | None = None,
 ) -> dict:
     """Arq worker task that runs the full pipeline for an autonomous job."""
     from datetime import datetime
@@ -386,9 +454,12 @@ async def run_autonomous_migration_job(
             raise RuntimeError(f"Autonomous job {job_id} not found.")
         redis = ctx["redis"]
 
-        from app.services.token_encryption import decrypt_token
+        if github_token:
+            from app.services.token_encryption import decrypt_token
 
-        decrypted_token = decrypt_token(github_token)
+            decrypted_token = decrypt_token(github_token)
+        else:
+            decrypted_token = None
 
         async def report(progress: int, stage: str, message: str) -> None:
             status = STAGE_TO_JOB_STATUS.get(stage, job.status)
@@ -415,6 +486,7 @@ async def run_autonomous_migration_job(
                 base_branch=base_branch,
                 title=title,
                 body=body,
+                target_files=target_files,
             )
             job.status = JobStatus.completed.value
             job.output_code = result.diff_summary

@@ -164,8 +164,12 @@ export const api = {
   engineHealth: () => unwrap(client.get<Record<string, unknown>>("/migrations/health")),
 
   // Autonomous migration
-  runAutonomous: (data: { repo_url: string; github_token?: string; base_branch?: string }) =>
-    unwrap(client.post("/autonomous/run", data)),
+  runAutonomous: (data: {
+    repo_url: string;
+    github_token?: string;
+    base_branch?: string;
+    target_files?: string[];
+  }) => unwrap(client.post("/autonomous/run", data)),
   getAutonomousJob: (id: number) =>
     unwrap(client.get(`/autonomous/jobs/${id}`)),
 

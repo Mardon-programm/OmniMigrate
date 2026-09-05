@@ -46,6 +46,26 @@ def test_invalid_source_passthrough():
     assert result.applied_rules == []
 
 
+def test_py2_print_statement_fallback():
+    # `print "x"` is Python 2-only syntax that LibCST cannot parse; the regex
+    # fallback must still modernize it.
+    code = 'print "Fetched %d bytes" % 5\nfor i in xrange(3):\n    print i\n'
+    result = apply_modernization_rules(code)
+    assert 'print("Fetched %d bytes" % 5)' in result.code
+    assert "print(i)" in result.code
+    assert "range(3)" in result.code
+    assert "xrange" not in result.code
+    assert "print statement -> print()" in result.applied_rules
+    assert "xrange -> range" in result.applied_rules
+
+
+def test_py2_fallback_idempotent():
+    code = 'print "x"\nfor i in xrange(3):\n    print i\n'
+    once = apply_modernization_rules(code).code
+    twice = apply_modernization_rules(once).code
+    assert once == twice
+
+
 def test_removed_distutils_import():
     code = "import distutils.core\nimport os\nfrom distutils import util\n"
     result = apply_modernization_rules(code)

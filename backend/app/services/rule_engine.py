@@ -129,6 +129,29 @@ def _ensure_timezone_import(source: str, needs_import: bool) -> str:
     return f"from datetime import timezone\n{source}"
 
 
+# Conservative text-level replacements for files that use Python 2-only
+# syntax which a modern parser (LibCST) cannot even parse (e.g. `print "x"`,
+# `import urllib2`). These run only as a last-resort fallback so legacy files
+# still get a best-effort modernization when no LLM is configured.
+_PY2_FALLBACK_RULES: list[tuple[re.Pattern, str, str]] = [
+    (re.compile(r"\bxrange\("), "range(", "xrange -> range"),
+    (re.compile(r"\bprint\s+([^#\n]+)$", re.MULTILINE), r"print(\1)", "print statement -> print()"),
+    (re.compile(r"\b\.utcnow\(\)"), ".now(timezone.utc)", "datetime.utcnow -> now(timezone.utc)"),
+]
+
+
+def _py2_regex_modernize(source: str) -> tuple[str, list[str]]:
+    """Best-effort regex modernization for Python 2 syntax that won't parse."""
+    new_source = source
+    applied: list[str] = []
+    for pattern, repl, label in _PY2_FALLBACK_RULES:
+        if pattern.search(new_source):
+            new_source, count = pattern.subn(repl, new_source)
+            if count:
+                applied.append(label)
+    return new_source, applied
+
+
 @dataclasses.dataclass
 class RuleEngineResult:
     code: str
@@ -144,7 +167,8 @@ def apply_modernization_rules(source: str) -> RuleEngineResult:
         module = cst.parse_module(source)
     except cst.ParserSyntaxError:
         logger.warning("Local rule engine skipped: source could not be parsed")
-        return RuleEngineResult(code=source, applied_rules=[])
+        new_source, applied = _py2_regex_modernize(source)
+        return RuleEngineResult(code=new_source, applied_rules=applied)
 
     transformer = _ModernizationTransformer()
     new_module = module.visit(transformer)

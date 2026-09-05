@@ -30,6 +30,7 @@ export function AutonomousPipeline() {
   const [repoUrl, setRepoUrl] = useState("");
   const [token, setToken] = useState("");
   const [baseBranch, setBaseBranch] = useState("main");
+  const [targetFiles, setTargetFiles] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [job, setJob] = useState<AutoJob | null>(null);
   const [polling, setPolling] = useState(false);
@@ -70,6 +71,10 @@ export function AutonomousPipeline() {
         repo_url: repoUrl.trim(),
         github_token: token || undefined,
         base_branch: baseBranch.trim() || "main",
+        target_files: targetFiles
+          .split(",")
+          .map((f) => f.trim())
+          .filter((f) => f.length > 0),
       });
       setJob({
         job_id: (res as Record<string, unknown>).job_id as number,
@@ -136,6 +141,20 @@ export function AutonomousPipeline() {
               onChange={(e) => setBaseBranch(e.target.value)}
               placeholder={t("autonomous.baseBranchPlaceholder")}
             />
+            <p className="mt-1 text-xs text-muted">{t("autonomous.baseBranchHint")}</p>
+          </div>
+          <div>
+            <label className="label" htmlFor="target-files">
+              {t("autonomous.targetFiles")}
+            </label>
+            <textarea
+              id="target-files"
+              className="input min-h-[64px]"
+              value={targetFiles}
+              onChange={(e) => setTargetFiles(e.target.value)}
+              placeholder={t("autonomous.targetFilesPlaceholder")}
+            />
+            <p className="mt-1 text-xs text-muted">{t("autonomous.targetFilesHint")}</p>
           </div>
           <button type="submit" className="btn-primary" disabled={submitting}>
             <Rocket className="h-4 w-4" />

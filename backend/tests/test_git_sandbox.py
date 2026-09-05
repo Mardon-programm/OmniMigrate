@@ -82,6 +82,12 @@ class TestRunTests:
         assert result.success is False
         assert "assert False" in result.stdout or "assert False" in result.stderr
 
+    def test_green_when_no_tests_ran(self, sandbox_project):
+        # A repo with no tests must not block the autonomous pipeline.
+        (Path(sandbox_project) / "app.py").write_text("x = 1\n", encoding="utf-8")
+        result = GitSandboxService.run_tests(sandbox_project)
+        assert result.success is True
+
 
 class TestProcessDirectory:
     def test_refactors_legacy_python(self, sandbox_project):

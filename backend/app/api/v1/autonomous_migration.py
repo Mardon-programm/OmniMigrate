@@ -23,6 +23,22 @@ from app.services.token_encryption import encrypt_token
 router = APIRouter()
 
 
+def _split_repo_url(repo_url: str) -> tuple[str, str]:
+    """Derive owner and repo name from an https/ssh git URL."""
+    url = repo_url.strip()
+    if url.endswith(".git"):
+        url = url[:-4]
+    url = url.rstrip("/")
+    tail = url.split("://", 1)[-1]
+    if tail.startswith("git@"):
+        tail = tail.split("@", 1)[-1]
+    tail = tail.split("/", 1)[-1]
+    parts = tail.split("/")
+    if len(parts) >= 2:
+        return parts[-2], parts[-1]
+    raise HTTPException(status_code=422, detail="Unable to parse repo owner/name from repo_url.")
+
+
 @router.post(
     "/run",
     response_model=AutonomousRunResponse,
@@ -37,13 +53,17 @@ async def run_autonomous_migration(
     except Exception as exc:  # surface friendly validation errors.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    default_owner, default_name = _split_repo_url(payload.repo_url)
+    repo_owner = payload.repo_owner or default_owner
+    repo_name = payload.repo_name or default_name
+
     # Resolve or create a project so the run shows up in the jobs UI.
     projects = ProjectRepository(session)
     project = await projects.get_by_owner_and_repo_url(user.id, payload.repo_url)
     if project is None:
         project = await projects.create(
             owner_id=user.id,
-            name=f"{payload.repo_owner}/{payload.repo_name}",
+            name=f"{repo_owner}/{repo_name}",
             description=f"Autonomous migration of {payload.repo_url}",
             repo_url=payload.repo_url,
             source_language="python",
@@ -54,7 +74,7 @@ async def run_autonomous_migration(
     jobs = JobRepository(session)
     job = await jobs.create(
         project_id=project.id,
-        title=f"Autonomous migration: {payload.repo_owner}/{payload.repo_name}",
+        title=f"Autonomous migration: {repo_owner}/{repo_name}",
         context_rule=payload.context_rule or DEFAULT_CONTEXT_RULE,
         input_code=(
             f"# Autonomous git-driven migration job\n"
@@ -65,9 +85,10 @@ async def run_autonomous_migration(
     job.metrics = {
         "kind": "autonomous-git",
         "repo_url": payload.repo_url,
-        "repo_owner": payload.repo_owner,
-        "repo_name": payload.repo_name,
+        "repo_owner": repo_owner,
+        "repo_name": repo_name,
         "base_branch": payload.base_branch,
+        "target_files": payload.target_files or [],
         "branch_name": None,
         "pull_request_url": None,
         "pull_request_number": None,
@@ -76,18 +97,19 @@ async def run_autonomous_migration(
     await session.commit()
     await session.refresh(job)
 
+    encrypted_token = encrypt_token(payload.github_token) if payload.github_token else None
     try:
-        encrypted_token = encrypt_token(payload.github_token)
         await enqueue_autonomous_migration(
             job_id=job.id,
             repo_url=payload.repo_url,
-            repo_owner=payload.repo_owner,
-            repo_name=payload.repo_name,
+            repo_owner=repo_owner,
+            repo_name=repo_name,
             github_token=encrypted_token,
             context_rule=payload.context_rule,
             base_branch=payload.base_branch,
             title=payload.title,
             body=payload.body,
+            target_files=payload.target_files,
         )
     except Exception:
         job.status = JobStatus.failed.value

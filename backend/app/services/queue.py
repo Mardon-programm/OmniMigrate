@@ -42,12 +42,13 @@ async def enqueue_autonomous_migration(
     repo_url: str,
     repo_owner: str,
     repo_name: str,
-    github_token: str,
+    github_token: str | None,
     context_rule: str | None,
     base_branch: str,
     title: str | None = None,
     body: str | None = None,
     priority: str | None = None,
+    target_files: list[str] | None = None,
 ) -> None:
     """Push an autonomous git-driven migration job onto the priority queue."""
     pool = await _pool()
@@ -64,6 +65,7 @@ async def enqueue_autonomous_migration(
             title,
             body,
             _queue_name=queue_name(priority),
+            target_files=target_files or [],
         )
     finally:
         await pool.aclose()

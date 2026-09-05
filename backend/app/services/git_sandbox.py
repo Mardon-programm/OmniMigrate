@@ -132,18 +132,41 @@ class GitSandboxService:
         workspace.mkdir(parents=True, exist_ok=True)
         project_dir = Path(tempfile.mkdtemp(prefix="omnimigrate_", dir=workspace))
 
-        cmd = ["git", "clone", "--depth", str(depth)]
-        if branch:
-            cmd += ["--branch", branch]
-        if extra_args:
-            cmd += extra_args
-        cmd += [url, str(project_dir)]
+        def _build(branch: str | None, extra: list[str] | None, target: str) -> list[str]:
+            cmd = ["git", "clone", "--depth", str(depth)]
+            if branch:
+                cmd += ["--branch", branch]
+            if extra:
+                cmd += extra
+            return [*cmd, url, target]
 
+        branch_label: str | None = branch or None
         try:
-            cls._run(cmd, cwd=workspace, timeout=settings.git_clone_timeout_seconds)
+            cls._run(
+                _build(branch_label, extra_args, str(project_dir)),
+                cwd=workspace,
+                timeout=settings.git_clone_timeout_seconds,
+            )
         except GitOperationError as exc:
-            shutil.rmtree(project_dir, ignore_errors=True)
-            raise GitOperationError(f"Failed to clone {url}: {exc}") from exc
+            # The requested branch may not exist (e.g. the repo's default is
+            # `master`, not `main`). Fall back to cloning without --branch so git
+            # checks out the repository's default branch instead of failing.
+            if branch_label:
+                logger.warning(
+                    "Branch %s not found for %s, falling back to default branch", branch_label, url
+                )
+                try:
+                    cls._run(
+                        _build(None, extra_args, str(project_dir)),
+                        cwd=workspace,
+                        timeout=settings.git_clone_timeout_seconds,
+                    )
+                except GitOperationError as exc2:
+                    shutil.rmtree(project_dir, ignore_errors=True)
+                    raise GitOperationError(f"Failed to clone {url}: {exc2}") from exc2
+            else:
+                shutil.rmtree(project_dir, ignore_errors=True)
+                raise GitOperationError(f"Failed to clone {url}: {exc}") from exc
 
         size = cls._dir_size(project_dir)
         if size > settings.git_max_repo_bytes:
@@ -151,7 +174,12 @@ class GitSandboxService:
             raise GitOperationError(
                 f"Repository exceeds the {settings.git_max_repo_bytes // (1024 * 1024)} MB limit."
             )
-        logger.info("Cloned %s (%s) in %.2f MB", url, branch, size / (1024 * 1024))
+        logger.info(
+            "Cloned %s (%s) in %.2f MB",
+            url,
+            branch_label or "default",
+            size / (1024 * 1024),
+        )
         return str(project_dir)
 
     @classmethod
@@ -175,7 +203,10 @@ class GitSandboxService:
         except FileNotFoundError:
             raise GitOperationError("pytest is not available in the sandbox image.") from None
 
-        success = proc.returncode == 0
+        # Exit code 5 means "no tests collected". An empty test suite is not a
+        # failure for an autonomous migration — treat it as green so repos
+        # without tests don't get stuck in an endless self-heal loop.
+        success = proc.returncode in (0, 5)
         return TestRunResult(
             returncode=proc.returncode,
             success=success,
@@ -191,6 +222,39 @@ class GitSandboxService:
             shutil.rmtree(project_dir, ignore_errors=True)
         except Exception:
             logger.warning("Failed to remove sandbox %s", project_dir)
+
+    # --- Branch introspection ---------------------------------------------
+
+    @staticmethod
+    def current_branches(project_dir: str) -> list[str]:
+        """Local branch names in the checkout (with an optional `origin/` prefix)."""
+        try:
+            proc = subprocess.run(
+                ["git", "branch", "--list", "--format", "%(refname:short)"],
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return []
+        return [b.strip() for b in (proc.stdout or "").splitlines() if b.strip()]
+
+    @staticmethod
+    def default_branch(project_dir: str) -> str:
+        """The currently checked-out branch (what `git clone` checked out by default)."""
+        try:
+            proc = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return "main"
+        branch = (proc.stdout or "").strip()
+        return branch or "main"
 
     # --- Directory refactoring --------------------------------------------
 
