@@ -1,29 +1,49 @@
-[tool.ruff]
-target-version = "py312"
-line-length = 100
-src = ["app", "tests"]
-
-[tool.ruff.lint]
-select = [
-    "E",      # pycodestyle errors
-    "W",      # pycodestyle warnings
-    "F",      # pyflakes
-    "I",      # isort
-    "UP",     # pyupgrade
-    "B",      # flake8-bugbear
-    "SIM",    # flake8-simplify
-    "ASYNC",  # flake8-async
-    "RUF",    # ruff-specific
+[project]
+name = "omnimigrate-backend"
+version = "1.0.0"
+description = "OmniMigrate backend API"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.115.6",
+    "uvicorn[standard]==0.34.0",
+    "sqlalchemy[asyncio]==2.0.36",
+    "asyncpg==0.30.0",
+    "pydantic==2.10.4",
+    "pydantic-settings==2.7.0",
+    "email-validator==2.2.0",
+    "alembic==1.14.0",
+    "redis==5.2.1",
+    "arq==0.26.1",
+    "PyJWT==2.10.1",
+    "bcrypt==4.2.1",
+    "python-multipart==0.0.20",
+    "libcst==1.6.0",
+    "openai==1.59.3",
+    "httpx==0.28.1",
+    "python-dotenv==1.0.1",
+    "tenacity==9.0.0",
+    "structlog==24.4.0",
+    "cryptography>=44.0.0",
+    "opentelemetry-api>=1.39.0",
+    "opentelemetry-sdk>=1.39.0",
+    "opentelemetry-instrumentation-fastapi>=0.60b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.60b0",
+    "opentelemetry-instrumentation-redis>=0.60b0",
+    "opentelemetry-instrumentation-httpx>=0.60b0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.39.0",
+    "prometheus-client>=0.24.0",
+    "pyotp==2.9.0",
 ]
-ignore = [
-    "B008",  # function call in default argument (FastAPI Depends pattern)
-    "S101",  # assert allowed (tests)
+
+[tool.uv]
+dev-dependencies = [
+    "pytest==8.3.4",
+    "pytest-asyncio==0.25.0",
+    "pytest-cov==6.0.0",
+    "ruff==0.8.6",
+    "pyright==1.1.394",
 ]
 
-[tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S110", "BLE001", "PLR", "SIM105"]
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-line-ending = "auto"
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
