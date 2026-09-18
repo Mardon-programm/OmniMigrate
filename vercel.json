@@ -1,33 +1,26 @@
 {
-  "services": {
-    "frontend": {
-      "root": "frontend",
-      "framework": "vite"
-    },
-    "backend": {
-      "root": "backend",
-      "functions": {
-        "api/index.py": {
-          "runtime": "python3.12",
-          "maxDuration": 30
-        }
+  "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "buildCommand": "npm run build",
+        "outputDirectory": "dist"
       }
+    },
+    {
+      "src": "backend/api/index.py",
+      "use": "@vercel/python"
     }
-  },
+  ],
   "rewrites": [
     {
-      "source": "/api(/.*)?",
-      "destination": {
-        "type": "service",
-        "service": "backend"
-      }
+      "source": "/api/(.*)",
+      "destination": "/backend/api/index.py"
     },
     {
       "source": "/(.*)",
-      "destination": {
-        "type": "service",
-        "service": "frontend"
-      }
+      "destination": "/frontend/$1"
     }
   ]
 }
