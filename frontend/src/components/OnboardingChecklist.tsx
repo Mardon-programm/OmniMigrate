@@ -61,33 +61,37 @@ export function OnboardingChecklist() {
   };
 
   return (
-    <div className="card relative mb-6 border border-primary/20 !bg-surface/50">
+    <div className="card border-brand-emerald/20 bg-brand-emerald/5">
       <button
         onClick={handleDismiss}
-        className="absolute right-3 top-3 rounded-lg p-1 text-muted transition-colors hover:bg-surface2 hover:text-white"
-        aria-label="Dismiss"
+        className="absolute right-3 top-3 btn-ghost btn-icon-sm"
+        aria-label={t("onboard.dismiss")}
       >
         <X className="h-4 w-4" />
       </button>
       <div className="mb-4 flex items-center gap-3">
-        <CheckCircle2 className="h-5 w-5 text-primary" />
-        <h3 className="text-sm font-semibold text-white">{t("onboard.title")}</h3>
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-emerald/10">
+          <CheckCircle2 className="h-5 w-5 text-brand-emerald" />
+        </div>
+        <h3 className="text-heading-sm font-semibold text-text-primary">{t("onboard.title")}</h3>
       </div>
-      <div className="space-y-3">
+      <div className="space-y-2">
         {steps.map((step, i) => (
           <button
             key={i}
             onClick={() => navigate(step.link)}
-            className="flex w-full items-center gap-3 rounded-lg border border-border/50 bg-surface/60 p-3 text-left transition-all hover:border-primary/40 hover:bg-surface2"
+            className="card-interactive w-full p-4"
           >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-              <step.icon className="h-4 w-4 text-primary" />
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-emerald/10">
+                <step.icon className="h-4 w-4 text-brand-emerald" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-text-primary">{t(step.titleKey)}</p>
+                <p className="text-caption text-text-tertiary">{t(step.descKey)}</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-text-tertiary shrink-0" />
             </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-white">{t(step.titleKey)}</p>
-              <p className="text-xs text-muted">{t(step.descKey)}</p>
-            </div>
-            <ArrowRight className="h-4 w-4 text-muted" />
           </button>
         ))}
       </div>

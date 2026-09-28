@@ -1,51 +1,51 @@
 import { useI18n } from "@/i18n";
 import type { JobStatus } from "@/types";
 
-const STYLES: Record<JobStatus, { classes: string; core: string; ring: string }> = {
+const STYLES: Record<JobStatus, { badge: string; dot: string; pulse: boolean }> = {
   queued: {
-    classes: "bg-slate-500/10 text-slate-300 border-slate-500/30",
-    core: "bg-slate-400",
-    ring: "",
+    badge: "badge-neutral",
+    dot: "bg-text-tertiary",
+    pulse: false,
   },
   parsing: {
-    classes: "bg-accent/10 text-accent border-accent/30",
-    core: "bg-accent shadow-[0_0_8px_rgba(6,182,212,0.8)]",
-    ring: "bg-accent/50 animate-led-ping",
+    badge: "badge-info",
+    dot: "bg-info",
+    pulse: true,
   },
   analyzing: {
-    classes: "bg-primary/10 text-primary border-primary/30",
-    core: "bg-primary shadow-[0_0_8px_rgba(16,185,129,0.8)]",
-    ring: "bg-primary/50 animate-led-ping",
+    badge: "badge-primary",
+    dot: "bg-brand-emerald",
+    pulse: true,
   },
   refactoring: {
-    classes: "bg-primary/10 text-primary border-primary/30",
-    core: "bg-primary shadow-[0_0_8px_rgba(16,185,129,0.8)]",
-    ring: "bg-primary/50 animate-led-ping",
+    badge: "badge-primary",
+    dot: "bg-brand-emerald",
+    pulse: true,
   },
   verifying: {
-    classes: "bg-primary/10 text-primary border-primary/30",
-    core: "bg-primary shadow-[0_0_8px_rgba(16,185,129,0.8)]",
-    ring: "bg-primary/50 animate-led-ping",
+    badge: "badge-primary",
+    dot: "bg-brand-emerald",
+    pulse: true,
   },
   healing: {
-    classes: "bg-warning/10 text-warning border-warning/30",
-    core: "bg-warning shadow-[0_0_8px_rgba(245,158,11,0.8)]",
-    ring: "bg-warning/50 animate-led-ping",
+    badge: "badge-warning",
+    dot: "bg-warning",
+    pulse: true,
   },
   completed: {
-    classes: "bg-success/10 text-success border-success/40 shadow-glow-sm",
-    core: "bg-success shadow-[0_0_8px_rgba(16,185,129,0.9)]",
-    ring: "",
+    badge: "badge-success",
+    dot: "bg-success",
+    pulse: false,
   },
   failed: {
-    classes: "bg-danger/10 text-danger border-danger/30",
-    core: "bg-danger shadow-[0_0_8px_rgba(239,68,68,0.8)]",
-    ring: "",
+    badge: "badge-danger",
+    dot: "bg-danger",
+    pulse: false,
   },
   cancelled: {
-    classes: "bg-muted/10 text-muted border-muted/30",
-    core: "bg-muted",
-    ring: "",
+    badge: "badge-neutral",
+    dot: "bg-text-tertiary",
+    pulse: false,
   },
 };
 
@@ -53,12 +53,12 @@ export function StatusBadge({ status }: { status: JobStatus }) {
   const { t } = useI18n();
   const style = STYLES[status] ?? STYLES.queued;
   return (
-    <span
-      className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-medium ${style.classes}`}
-    >
+    <span className={`inline-flex items-center gap-1.5 ${style.badge}`}>
       <span className="relative flex h-1.5 w-1.5">
-        {style.ring && <span className={`absolute inline-flex h-full w-full rounded-full ${style.ring}`} />}
-        <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${style.core}`} />
+        {style.pulse && (
+          <span className="absolute inset-0 rounded-full bg-current/50 animate-ping" />
+        )}
+        <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${style.dot}`} />
       </span>
       {t(`status.${status}`)}
     </span>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Columns2, FileDiff, Rows3 } from "lucide-react";
+import { Columns2, FileDiff, Rows3, Copy, Check } from "lucide-react";
 
 import { useI18n } from "@/i18n";
 
@@ -63,24 +63,24 @@ export function toSplitRows(lines: DiffLine[]): SplitRow[] {
 }
 
 const UNIFIED_LINE_CLASSES: Record<DiffLine["type"], string> = {
-  header: "bg-surface2 text-primary-400 font-semibold",
-  meta: "bg-accent/10 text-accent font-medium",
-  add: "bg-success/[0.08] text-success",
-  del: "bg-danger/[0.08] text-danger",
-  context: "text-slate-400",
+  header: "bg-bg-tertiary text-brand-emeraldLight font-semibold",
+  meta: "bg-brand-cyan/10 text-brand-cyan font-medium",
+  add: "bg-success-bg text-success-text",
+  del: "bg-danger-bg text-danger-text",
+  context: "text-text-secondary",
 };
 
 const PREFIX_CLASSES: Record<DiffLine["type"], string> = {
   header: "",
   meta: "",
-  add: "text-success",
-  del: "text-danger",
-  context: "text-muted",
+  add: "text-success-text",
+  del: "text-danger-text",
+  context: "text-text-tertiary",
 };
 
 function SideNumber({ n }: { n: number }) {
   return (
-    <span className="w-10 shrink-0 select-none border-r border-border/40 px-1.5 text-right text-[11px] text-muted/40">
+    <span className="w-10 shrink-0 select-none border-r border-border-primary px-1.5 text-right text-[11px] text-text-tertiary/40">
       {n}
     </span>
   );
@@ -94,6 +94,7 @@ interface DiffViewerProps {
 export function DiffViewer({ diff, className = "" }: DiffViewerProps) {
   const { t } = useI18n();
   const [mode, setMode] = useState<DiffMode>("split");
+  const [copied, setCopied] = useState(false);
   const lines = useMemo(() => parseDiff(diff), [diff]);
   const splitRows = useMemo(
     () => (mode === "split" ? toSplitRows(lines) : []),
@@ -112,50 +113,61 @@ export function DiffViewer({ diff, className = "" }: DiffViewerProps) {
 
   if (!diff || !lines.length) {
     return (
-      <div className="flex flex-col items-center gap-3 py-16 text-muted">
-        <FileDiff className="h-10 w-10" />
-        <p className="text-sm">{t("diff.noDiff")}</p>
+      <div className="card flex flex-col items-center justify-center py-16 text-text-tertiary">
+        <FileDiff className="h-10 w-10 mb-3 text-text-tertiary/50" />
+        <p className="text-body-sm">{t("diff.noDiff")}</p>
       </div>
     );
   }
 
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(diff);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
-    <div className={`overflow-hidden rounded-2xl border border-border ${className}`}>
-      <div className="flex items-center justify-between border-b border-border bg-surface2 px-4 py-2.5">
-        <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
-          <FileDiff className="h-4 w-4 text-primary" />
+    <div className={`card overflow-hidden ${className}`}>
+      <div className="flex items-center justify-between border-b border-border-primary bg-bg-tertiary/50 px-4 py-3">
+        <div className="flex items-center gap-2 text-body-sm font-medium text-text-primary">
+          <FileDiff className="h-4 w-4 text-brand-emerald" />
           {t("diff.title")}
-          <span className="ml-2 flex items-center gap-3 font-mono text-xs">
-            <span className="text-success">+{stats.additions}</span>
-            <span className="text-danger">-{stats.deletions}</span>
+          <span className="ml-2 flex items-center gap-3 font-mono text-caption">
+            <span className="text-success-text">+{stats.additions}</span>
+            <span className="text-danger-text">-{stats.deletions}</span>
           </span>
         </div>
-        <div className="flex items-center gap-0.5 rounded-lg border border-border bg-black/30 p-0.5">
-          {(
-            [
-              { id: "split", icon: Columns2, key: "diff.modeSplit" },
-              { id: "unified", icon: Rows3, key: "diff.modeUnified" },
-            ] as const
-          ).map(({ id, icon: Icon, key }) => (
-            <button
-              key={id}
-              onClick={() => setMode(id)}
-              title={t(key)}
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all duration-150 ${
-                mode === id
-                  ? "bg-primary/15 text-primary shadow-glow-sm"
-                  : "text-muted hover:text-slate-200"
-              }`}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{t(key)}</span>
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleCopy}
+            className="btn-ghost btn-sm btn-icon"
+            aria-label={copied ? t("diff.copied") : t("diff.copy")}
+          >
+            {copied ? <Check className="h-4 w-4 text-success-text" /> : <Copy className="h-4 w-4" />}
+          </button>
+          <div className="flex items-center gap-0.5 rounded-lg border border-border-primary bg-bg-tertiary/50 p-0.5">
+            {(
+              [
+                { id: "split", icon: Columns2, key: "diff.modeSplit" },
+                { id: "unified", icon: Rows3, key: "diff.modeUnified" },
+              ] as const
+            ).map(({ id, icon: Icon, key }) => (
+              <button
+                key={id}
+                onClick={() => setMode(id)}
+                title={t(key)}
+                className={`tab ${mode === id ? "tab-active" : ""} px-2.5 py-1.5`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{t(key)}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {mode === "unified" ? (
-        <pre className="max-h-[560px] overflow-auto bg-code py-3 font-mono text-[13px] leading-5">
+        <pre className="max-h-[560px] overflow-auto bg-code p-4 font-mono text-code leading-6">
           {lines.map((line, index) => (
             <div key={index} className={`flex ${UNIFIED_LINE_CLASSES[line.type]}`}>
               <SideNumber n={index} />
@@ -170,23 +182,23 @@ export function DiffViewer({ diff, className = "" }: DiffViewerProps) {
         </pre>
       ) : (
         <div className="max-h-[560px] overflow-auto">
-          <div className="sticky top-0 z-10 grid grid-cols-2 border-b border-border text-[11px] font-semibold uppercase tracking-wider">
-            <div className="flex items-center gap-1.5 bg-red-950/50 px-3 py-1.5 text-danger backdrop-blur-sm">
+          <div className="sticky top-0 z-10 grid grid-cols-2 border-b border-border-primary text-caption font-semibold uppercase tracking-wider">
+            <div className="flex items-center gap-1.5 bg-danger-bg/50 px-3 py-2 text-danger-text">
               <span className="h-1.5 w-1.5 rounded-full bg-danger" />
               {t("diff.legacy")}
             </div>
-            <div className="flex items-center gap-1.5 border-l border-border bg-emerald-950/50 px-3 py-1.5 text-primary backdrop-blur-sm">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+            <div className="flex items-center gap-1.5 border-l border-border-primary bg-success-bg/50 px-3 py-2 text-success-text">
+              <span className="h-1.5 w-1.5 rounded-full bg-success" />
               {t("diff.modernized")}
             </div>
           </div>
-          <pre className="grid grid-cols-2 bg-code font-mono text-[13px] leading-5">
-            <code className="border-r border-border bg-red-950/20 pb-3 pt-3">
+          <pre className="grid grid-cols-2 bg-code font-mono text-code leading-6">
+            <code className="border-r border-border-primary bg-danger-bg/20 p-3">
               {splitRows.map((row, index) =>
                 row.kind === "divider" ? (
                   <div
                     key={index}
-                    className="my-1 flex h-6 items-center overflow-hidden bg-surface2 px-3 text-[11px] font-semibold text-primary-400"
+                    className="my-1 flex h-6 items-center overflow-hidden bg-bg-tertiary px-3 text-[11px] font-semibold text-brand-emeraldLight"
                   >
                     <span className="truncate whitespace-pre">
                       {row.left?.content ?? ""}
@@ -197,10 +209,10 @@ export function DiffViewer({ diff, className = "" }: DiffViewerProps) {
                     key={index}
                     className={`flex ${
                       row.left.type === "meta"
-                        ? "bg-accent/10 text-accent"
+                        ? "bg-brand-cyan/10 text-brand-cyan"
                         : row.left.type === "del"
-                          ? "bg-danger/15 text-danger"
-                          : "text-slate-400"
+                          ? "bg-danger-bg text-danger-text"
+                          : "text-text-secondary"
                     }`}
                   >
                     <SideNumber n={index} />
@@ -211,22 +223,22 @@ export function DiffViewer({ diff, className = "" }: DiffViewerProps) {
                 ),
               )}
             </code>
-            <code className="bg-emerald-950/20 pb-3 pt-3">
+            <code className="bg-success-bg/20 p-3">
               {splitRows.map((row, index) =>
                 row.kind === "divider" ? (
                   <div
                     key={index}
-                    className="my-1 h-6 bg-surface2"
+                    className="my-1 h-6 bg-bg-tertiary"
                   />
                 ) : row.right ? (
                   <div
                     key={index}
                     className={`flex ${
                       row.right.type === "meta"
-                        ? "bg-accent/10 text-accent"
+                        ? "bg-brand-cyan/10 text-brand-cyan"
                         : row.right.type === "add"
-                          ? "bg-success/15 text-success"
-                          : "text-slate-400"
+                          ? "bg-success-bg text-success-text"
+                          : "text-text-secondary"
                     }`}
                   >
                     <SideNumber n={index} />

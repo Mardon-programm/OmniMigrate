@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   FileCode2,
-  Info,
   Rocket,
   ScanSearch,
   GitCompareArrows,
@@ -17,9 +16,9 @@ import { api } from "@/services/api";
 import type { Finding, Project } from "@/types";
 
 const SEVERITY_STYLES: Record<Finding["severity"], string> = {
-  critical: "text-danger",
-  warning: "text-warning",
-  info: "text-accent",
+  critical: "text-danger-text",
+  warning: "text-warning-text",
+  info: "text-info-text",
 };
 
 export function CodeUpload() {
@@ -120,23 +119,23 @@ export function CodeUpload() {
   }, [findings]);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">{t("upload.title")}</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted">{t("upload.subtitle")}</p>
+    <div className="page">
+      <div className="page-header">
+        <h1 className="page-title">{t("upload.title")}</h1>
+        <p className="page-subtitle max-w-2xl">{t("upload.subtitle")}</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
-          <div className="card space-y-4">
+          <div className="card space-y-6 p-6">
             <div className="grid gap-4 sm:grid-cols-2">
-              <div>
+              <div className="form-group">
                 <label className="label" htmlFor="u-project">
                   {t("upload.project")}
                 </label>
                 <select
                   id="u-project"
-                  className="input"
+                  className="select"
                   value={projectId}
                   onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : "")}
                 >
@@ -148,16 +147,16 @@ export function CodeUpload() {
                   ))}
                 </select>
                 {projects.length === 0 && (
-                  <p className="mt-1.5 text-xs text-warning">
+                  <p className="form-hint">
                     {t("upload.noProjectsYet")}{" "}
-                    <Link to="/projects" className="text-primary hover:underline">
+                    <Link to="/projects" className="text-brand-emeraldLight hover:underline">
                       {t("upload.createOne")}
                     </Link>
                     .
                   </p>
                 )}
               </div>
-              <div>
+              <div className="form-group">
                 <label className="label" htmlFor="u-title">
                   {t("upload.jobTitle")}
                 </label>
@@ -171,13 +170,13 @@ export function CodeUpload() {
               </div>
             </div>
 
-            <div className="max-w-[220px]">
+            <div className="form-group max-w-[220px]">
               <label className="label" htmlFor="u-priority">
                 {t("upload.priority")}
               </label>
               <select
                 id="u-priority"
-                className="input"
+                className="select"
                 value={priority}
                 onChange={(e) =>
                   setPriority(e.target.value as "urgent" | "normal" | "bulk")
@@ -187,37 +186,37 @@ export function CodeUpload() {
                 <option value="normal">{t("upload.priorityNormal")}</option>
                 <option value="bulk">{t("upload.priorityBulk")}</option>
               </select>
-              <p className="mt-1 text-xs text-muted">{t("upload.priorityHint")}</p>
+              <p className="form-hint">{t("upload.priorityHint")}</p>
             </div>
 
-            <div>
+            <div className="form-group">
               <label className="label" htmlFor="u-rule">
                 {t("upload.contextRule")}
               </label>
               <textarea
                 id="u-rule"
-                className="input min-h-[64px] font-mono text-xs"
+                className="textarea min-h-[64px]"
                 value={contextRule}
                 onChange={(e) => setContextRule(e.target.value)}
                 placeholder={t("upload.contextRulePlaceholder")}
               />
-              <p className="mt-1 text-xs text-muted">{t("upload.contextRuleHint")}</p>
+              <p className="form-hint">{t("upload.contextRuleHint")}</p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <label className="label mb-0" htmlFor="u-filename">
+            <div className="form-group">
+              <label className="label" htmlFor="u-filename">
                 {t("upload.filename")}
               </label>
               <input
                 id="u-filename"
-                className="input max-w-[220px] font-mono text-xs"
+                className="input max-w-[220px] font-mono text-code"
                 value={filename}
                 onChange={(e) => setFilename(e.target.value)}
               />
             </div>
 
-            <div>
-              <div className="mb-2 flex items-center justify-between">
+            <div className="form-group">
+              <div className="flex items-center justify-between mb-2">
                 <label className="label mb-0" htmlFor="u-code">
                   {t("upload.legacyCode")}
                 </label>
@@ -225,7 +224,7 @@ export function CodeUpload() {
                   type="button"
                   onClick={onAnalyze}
                   disabled={analyzing || !code.trim()}
-                  className="btn-secondary px-3 py-1.5 text-xs"
+                  className="btn-secondary btn-sm"
                 >
                   {analyzing ? (
                     <Spinner size="sm" label={t("upload.analyzing")} />
@@ -239,21 +238,22 @@ export function CodeUpload() {
               </div>
               <textarea
                 id="u-code"
-                className="input min-h-[420px] font-mono text-xs leading-5"
+                className="textarea min-h-[420px]"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 placeholder={t("upload.codePlaceholder")}
+                spellCheck={false}
               />
             </div>
 
-            <div className="flex items-center justify-end gap-3">
+            <div className="flex items-center justify-end gap-3 border-t border-border-primary pt-4">
               <Link to="/" className="btn-secondary">
                 {t("common.cancel")}
               </Link>
               <button
                 onClick={onSubmit}
                 disabled={submitting || !code.trim() || !projectId}
-                className="btn-accent"
+                className="btn-primary"
               >
                 {submitting ? (
                   <Spinner size="sm" label={t("upload.submitting")} />
@@ -269,64 +269,62 @@ export function CodeUpload() {
         </div>
 
         <div className="space-y-4">
-          <div className="card">
-            <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-white">
-              <FileCode2 className="h-4 w-4 text-primary" />
+          <div className="card p-6">
+            <h2 className="mb-4 flex items-center gap-2 text-heading-sm font-semibold text-text-primary">
+              <FileCode2 className="h-5 w-5 text-brand-emerald" />
               {t("upload.analysisTitle")}
             </h2>
 
-            {analyzing && <Spinner label={t("upload.analyzingDesc")} />}
+            {analyzing && (
+              <div className="flex items-center justify-center py-8">
+                <Spinner label={t("upload.analyzingDesc")} />
+              </div>
+            )}
 
             {parseError && !analyzing && (
-              <div className="rounded-lg border border-danger/30 bg-danger/10 p-3 text-sm text-danger">
+              <div className="rounded-xl border border-danger-border bg-danger-bg p-4 text-body-sm text-danger-text">
                 <p className="font-medium">{t("upload.parseError")}</p>
-                <p className="mt-1 font-mono text-xs">{parseError}</p>
+                <p className="mt-1 font-mono text-code">{parseError}</p>
               </div>
             )}
 
             {findings && !analyzing && !parseError && (
               <>
                 {findings.length === 0 ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 p-3 text-sm text-success">
-                    <CheckCircle2 className="h-4 w-4" />
+                  <div className="rounded-xl border border-success-border bg-success-bg p-4 text-body-sm text-success-text flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
                     {t("upload.noIssues")}
                   </div>
                 ) : (
                   <>
                     {findingStats && (
-                      <div className="mb-3 flex gap-2 text-xs">
-                        <span className="rounded-md bg-danger/15 px-2 py-1 text-danger">
-                          {t("upload.critical", { count: findingStats.critical })}
-                        </span>
-                        <span className="rounded-md bg-warning/15 px-2 py-1 text-warning">
-                          {t("upload.warnings", { count: findingStats.warning })}
-                        </span>
-                        <span className="rounded-md bg-accent/15 px-2 py-1 text-accent">
-                          {t("upload.info", { count: findingStats.info })}
-                        </span>
+                      <div className="mb-4 flex flex-wrap gap-2 text-caption">
+                        <span className="badge-danger">{t("upload.critical", { count: findingStats.critical })}</span>
+                        <span className="badge-warning">{t("upload.warnings", { count: findingStats.warning })}</span>
+                        <span className="badge-info">{t("upload.info", { count: findingStats.info })}</span>
                       </div>
                     )}
                     <div className="max-h-[520px] space-y-2 overflow-auto pr-1">
                       {findings.map((finding, i) => (
-                        <div key={i} className="rounded-lg border border-border bg-code p-3">
+                        <div key={i} className="card p-3">
                           <div className="flex items-center gap-2">
                             <AlertTriangle className={`h-3.5 w-3.5 ${SEVERITY_STYLES[finding.severity]}`} />
-                            <span className={`text-xs font-medium ${SEVERITY_STYLES[finding.severity]}`}>
+                            <span className="badge-dot {SEVERITY_BADGES[finding.severity]}">
                               {finding.severity.toUpperCase()}
                             </span>
-                            <span className="rounded bg-surface2 px-1.5 py-0.5 font-mono text-[10px] text-muted">
-                              {finding.category}
-                            </span>
+                            <span className="badge-neutral">{finding.category}</span>
                             {finding.line != null && (
-                              <span className="ml-auto font-mono text-[10px] text-muted">
+                              <span className="ml-auto font-mono text-code text-text-tertiary">
                                 {t("common.line")} {finding.line}
                               </span>
                             )}
                           </div>
-                          <p className="mt-1.5 text-xs text-slate-300">{finding.message}</p>
+                          <p className="mt-2 text-body-sm text-text-secondary">{finding.message}</p>
                           {finding.suggestion && (
-                            <p className="mt-1 flex items-start gap-1 text-[11px] text-muted">
-                              <Info className="mt-0.5 h-3 w-3 shrink-0" />
+                            <p className="mt-1.5 flex items-start gap-1.5 text-caption text-text-tertiary">
+                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded bg-brand-emerald/10 text-brand-emeraldLight">
+                                <span className="text-[10px]">i</span>
+                              </span>
                               {finding.suggestion}
                             </p>
                           )}
@@ -339,20 +337,25 @@ export function CodeUpload() {
             )}
 
             {!findings && !parseError && !analyzing && (
-              <p className="text-sm text-muted">
+              <p className="text-body-sm text-text-tertiary text-center py-8">
                 {t("upload.analysisHint")}
               </p>
             )}
           </div>
 
-          <div className="card">
-            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-white">
-              <GitCompareArrows className="h-4 w-4 text-accent" />
+          <div className="card p-6">
+            <h2 className="mb-3 flex items-center gap-2 text-heading-sm font-semibold text-text-primary">
+              <GitCompareArrows className="h-5 w-5 text-brand-cyan" />
               {t("upload.pipelineTitle")}
             </h2>
-            <ol className="space-y-1.5 text-xs text-muted">
+            <ol className="space-y-2 text-body-sm text-text-tertiary">
               {dict.upload.pipelineSteps.map((step, i) => (
-                <li key={i}>{step}</li>
+                <li key={i} className="flex items-start gap-3">
+                  <span className="flex shrink-0 h-6 w-6 items-center justify-center rounded-full bg-brand-emerald/10 text-brand-emeraldLight font-mono text-caption font-medium">
+                    {i + 1}
+                  </span>
+                  <span>{step}</span>
+                </li>
               ))}
             </ol>
           </div>

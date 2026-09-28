@@ -9,32 +9,26 @@ export function Spinner({ size = "md", label, className = "" }: SpinnerProps) {
     return (
       <span
         role="status"
-        className={`inline-flex items-center gap-2 text-muted ${className}`}
+        aria-label={label}
+        className={`inline-flex items-center gap-2 text-text-tertiary ${className}`}
       >
-        <span className="relative flex h-2 w-8 overflow-hidden rounded-full bg-border">
-          <span className="pipeline-bar-fill" />
-        </span>
-        {label && <span className="text-xs">{label}</span>}
+        <span className="h-4 w-4 animate-spin rounded-full border-2 border-border-primary border-t-brand-emerald" />
+        {label && <span className="text-caption">{label}</span>}
       </span>
     );
   }
 
-  const width = size === "lg" ? "w-56" : "w-36";
+  const dimension = size === "lg" ? "h-10 w-10" : "h-6 w-6";
   return (
     <div
       role="status"
-      className={`flex flex-col items-center gap-3 text-muted ${className}`}
+      aria-label={label}
+      className={`flex flex-col items-center gap-3 ${className}`}
     >
-      <span className={`relative ${width}`}>
-        <span className="pipeline-bar block">
-          <span className="pipeline-bar-fill" />
-          <span
-            className="pipeline-bar-fill"
-            style={{ animationDelay: "0.4s" }}
-          />
-        </span>
-      </span>
-      {label && <span className="text-sm">{label}</span>}
+      <span
+        className={`${dimension} animate-spin rounded-full border-3 border-border-primary border-t-brand-emerald`}
+      />
+      {label && <span className="text-body-sm text-text-tertiary">{label}</span>}
     </div>
   );
 }
