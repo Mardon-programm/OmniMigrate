@@ -35,8 +35,8 @@ class Plan(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    stripe_price_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    stripe_product_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    paddle_price_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    paddle_product_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     amount_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="usd")
     interval: Mapped[PlanInterval] = mapped_column(
@@ -76,12 +76,12 @@ class Subscription(Base):
         nullable=False,
         index=True,
     )
-    stripe_subscription_id: Mapped[str | None] = mapped_column(
+    paddle_subscription_id: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,
         unique=True,
     )
-    stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    paddle_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[SubscriptionStatus] = mapped_column(
         nullable=False,
         default=SubscriptionStatus.trialing,

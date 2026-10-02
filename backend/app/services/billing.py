@@ -1,105 +1,156 @@
-"""Billing service — plan management, usage metering, quota enforcement."""
-
 from __future__ import annotations
 
-from collections.abc import Sequence
-from datetime import UTC, datetime, timedelta
+import hmac
+import hashlib
+import httpx
+from typing import Optional
 
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.models.billing import (
-    Plan,
-    Subscription,
-    SubscriptionStatus,
-    UsageRecord,
-)
+from app.core.config import settings
 
 
-async def list_plans(db: AsyncSession) -> Sequence[Plan]:
-    stmt = select(Plan).where(Plan.is_active == True).order_by(Plan.amount_cents)  # noqa: E712
-    return (await db.execute(stmt)).scalars().all()
+class BillingService:
+    """Paddle billing service for subscriptions and checkout."""
+
+    def __init__(self):
+        self.enabled = bool(settings.paddle_api_key)
+        self.api_key = settings.paddle_api_key
+        self.webhook_secret = settings.paddle_webhook_secret
+        self.vendor_id = settings.paddle_vendor_id
+        self.base_url = "https://api.paddle.com" if settings.environment == "production" else "https://sandbox-api.paddle.com"
+
+    def _headers(self) -> dict:
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+    async def create_checkout_session(
+        self,
+        user_id: str,
+        user_email: str,
+        price_id: str,
+        success_url: str,
+        cancel_url: str,
+        metadata: Optional[dict] = None,
+    ) -> Optional[str]:
+        """Create a Paddle Checkout session for subscription."""
+        if not self.enabled:
+            return None
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.base_url}/transactions",
+                    headers=self._headers(),
+                    json={
+                        "items": [{"price_id": price_id, "quantity": 1}],
+                        "checkout": {
+                            "success_url": success_url,
+                            "cancel_url": cancel_url,
+                        },
+                        "customer": {"email": user_email},
+                        "custom_data": {"user_id": user_id, **(metadata or {})},
+                        "recurring": True,
+                    },
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+                data = response.json()
+                return data["data"]["checkout"]["url"]
+        except httpx.HTTPError:
+            return None
+
+    async def create_billing_portal_session(
+        self, customer_id: str, return_url: str
+    ) -> Optional[str]:
+        """Create a Paddle Customer Portal session for subscription management."""
+        if not self.enabled:
+            return None
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.base_url}/customers/{customer_id}/portal-session",
+                    headers=self._headers(),
+                    json={"return_url": return_url},
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+                data = response.json()
+                return data["data"]["url"]
+        except httpx.HTTPError:
+            return None
+
+    async def get_customer_id(self, email: str) -> Optional[str]:
+        """Get or create a Paddle customer by email."""
+        if not self.enabled:
+            return None
+
+        try:
+            async with httpx.AsyncClient() as client:
+                # Search for existing customer
+                response = await client.get(
+                    f"{self.base_url}/customers",
+                    headers=self._headers(),
+                    params={"email": email},
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+                data = response.json()
+                if data["data"]:
+                    return data["data"][0]["id"]
+
+                # Create new customer
+                response = await client.post(
+                    f"{self.base_url}/customers",
+                    headers=self._headers(),
+                    json={"email": email},
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+                data = response.json()
+                return data["data"]["id"]
+        except httpx.HTTPError:
+            return None
+
+    async def cancel_subscription(self, subscription_id: str) -> bool:
+        """Cancel a subscription at period end."""
+        if not self.enabled:
+            return False
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.patch(
+                    f"{self.base_url}/subscriptions/{subscription_id}",
+                    headers=self._headers(),
+                    json={"status": "paused"},
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+                return True
+        except httpx.HTTPError:
+            return False
+
+    def construct_webhook_event(self, payload: bytes, sig_header: str):
+        """Verify and construct webhook event."""
+        if not self.enabled or not self.webhook_secret:
+            return None
+
+        try:
+            # Paddle uses HMAC-SHA256 for webhook verification
+            expected_sig = hmac.new(
+                self.webhook_secret.encode(),
+                payload,
+                hashlib.sha256
+            ).hexdigest()
+
+            if not hmac.compare_digest(expected_sig, sig_header):
+                return None
+
+            import json
+            return json.loads(payload.decode())
+        except Exception:
+            return None
 
 
-async def get_plan(db: AsyncSession, plan_id: int) -> Plan | None:
-    return await db.get(Plan, plan_id)
-
-
-async def get_org_subscription(
-    db: AsyncSession,
-    org_id: int,
-) -> Subscription | None:
-    stmt = (
-        select(Subscription)
-        .where(
-            Subscription.organization_id == org_id,
-            Subscription.status.in_(
-                [
-                    SubscriptionStatus.active,
-                    SubscriptionStatus.trialing,
-                ]
-            ),
-        )
-        .order_by(Subscription.created_at.desc())
-        .limit(1)
-    )
-    return (await db.execute(stmt)).scalar_one_or_none()
-
-
-async def record_usage(
-    db: AsyncSession,
-    *,
-    org_id: int,
-    subscription_id: int | None,
-    metric: str,
-    quantity: int = 1,
-) -> UsageRecord:
-    entry = UsageRecord(
-        organization_id=org_id,
-        subscription_id=subscription_id,
-        metric=metric,
-        quantity=quantity,
-    )
-    db.add(entry)
-    return entry
-
-
-async def get_usage_summary(
-    db: AsyncSession,
-    org_id: int,
-    metric: str,
-    period_start: datetime | None = None,
-) -> int:
-    stmt = select(func.coalesce(func.sum(UsageRecord.quantity), 0)).where(
-        UsageRecord.organization_id == org_id,
-        UsageRecord.metric == metric,
-    )
-    if period_start is not None:
-        stmt = stmt.where(UsageRecord.recorded_at >= period_start)
-    return (await db.execute(stmt)).scalar_one()
-
-
-async def check_quota(
-    db: AsyncSession,
-    org_id: int,
-    metric: str,
-    limit: int,
-    period_days: int = 30,
-) -> bool:
-    """Returns True if within quota (not exceeded)."""
-    period_start = datetime.now(UTC) - timedelta(days=period_days)
-    usage = await get_usage_summary(db, org_id, metric, period_start)
-    return usage < limit
-
-
-async def get_org_usage_details(
-    db: AsyncSession,
-    org_id: int,
-    period_days: int = 30,
-) -> dict[str, int]:
-    period_start = datetime.now(UTC) - timedelta(days=period_days)
-    metrics = ["jobs", "llm_tokens", "files"]
-    result: dict[str, int] = {}
-    for m in metrics:
-        result[m] = await get_usage_summary(db, org_id, m, period_start)
-    return result
+billing_service = BillingService()

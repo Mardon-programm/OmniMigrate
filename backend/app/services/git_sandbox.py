@@ -12,8 +12,22 @@ from pathlib import Path
 import structlog
 
 from app.core.config import settings
+from app.services.sandbox import SandboxConfig, DynamicSandbox
 
 logger = structlog.get_logger(__name__)
+
+# Global dynamic sandbox for test runs
+_git_sandbox = DynamicSandbox(
+    config=SandboxConfig(
+        timeout_seconds=settings.git_test_timeout_seconds,
+        memory_limit="1g",
+        cpu_limit=2.0,
+        network_disabled=False,  # Tests may need network
+        read_only_rootfs=False,
+    ),
+    enabled=settings.sandbox_enabled,
+    image="python:3.12-slim",
+)
 
 # Only these remote hosts may be cloned to keep the sandbox from hitting
 # internal networks (SSRF hardening).
@@ -184,35 +198,62 @@ class GitSandboxService:
 
     @classmethod
     def run_tests(cls, project_dir: str) -> TestRunResult:
-        """Run the repo's pytest suite and capture the outcome."""
-        started = time.monotonic()
-        cmd = ["python", "-m", "pytest", "-x", "-q", "--tb=short"]
-        try:
-            proc = subprocess.run(
-                cmd,
-                cwd=project_dir,
-                capture_output=True,
-                text=True,
-                timeout=settings.git_test_timeout_seconds,
-                preexec_fn=cls._sandbox_preexec if _IS_UNIX else None,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise GitOperationError(
-                f"Test suite timed out after {settings.git_test_timeout_seconds}s."
-            ) from exc
-        except FileNotFoundError:
-            raise GitOperationError("pytest is not available in the sandbox image.") from None
+        """Run the repo's pytest suite in an isolated Docker container."""
+        # First, detect if there's a requirements.txt or pyproject.toml
+        project_path = Path(project_dir)
+        requirements_files = list(project_path.glob("requirements*.txt"))
+        pyproject = project_path / "pyproject.toml"
 
-        # Exit code 5 means "no tests collected". An empty test suite is not a
-        # failure for an autonomous migration — treat it as green so repos
-        # without tests don't get stuck in an endless self-heal loop.
-        success = proc.returncode in (0, 5)
+        # Build a test script that installs deps and runs pytest
+        test_script = f"""
+import subprocess
+import sys
+import os
+
+os.chdir("{project_dir}")
+
+# Install dependencies if present
+if os.path.exists("requirements.txt"):
+    subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], check=False)
+elif os.path.exists("pyproject.toml"):
+    subprocess.run([sys.executable, "-m", "pip", "install", "-e", "."], check=False)
+
+# Run pytest
+result = subprocess.run(
+    [sys.executable, "-m", "pytest", "-x", "-q", "--tb=short"],
+    capture_output=True,
+    text=True,
+    timeout={settings.git_test_timeout_seconds}
+)
+print("__EXIT_CODE__", result.returncode)
+print("__STDOUT__", result.stdout)
+print("__STDERR__", result.stderr)
+"""
+
+        # Use dynamic sandbox to run tests
+        result = _git_sandbox.verify_with_deps(test_script, language="python")
+
+        # Parse output
+        stdout = result.stdout or ""
+        stderr = result.stderr or ""
+        
+        exit_code = 1
+        for line in stdout.splitlines():
+            if line.startswith("__EXIT_CODE__"):
+                try:
+                    exit_code = int(line.split("__EXIT_CODE__")[1].strip())
+                except Exception:
+                    pass
+
+        # Exit code 5 means "no tests collected"
+        success = exit_code in (0, 5)
+
         return TestRunResult(
-            returncode=proc.returncode,
+            returncode=exit_code,
             success=success,
-            stdout=(proc.stdout or ""),
-            stderr=(proc.stderr or ""),
-            duration_seconds=time.monotonic() - started,
+            stdout=stdout,
+            stderr=stderr,
+            duration_seconds=0,  # Duration tracked by sandbox
         )
 
     @staticmethod

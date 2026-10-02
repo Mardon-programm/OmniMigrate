@@ -31,6 +31,12 @@ def _validate_production_secrets() -> None:
         issues.append("DATABASE_URL must use strong credentials, not the defaults")
     if settings.bcrypt_rounds < 12:
         issues.append("BCRYPT_ROUNDS must be at least 12 in production")
+    if not settings.openai_api_key and not settings.llm_fallback_to_rules:
+        issues.append("OPENAI_API_KEY required when LLM_FALLBACK_TO_RULES=false")
+    if settings.paddle_api_key and not settings.paddle_webhook_secret:
+        issues.append("PADDLE_WEBHOOK_SECRET required when PADDLE_API_KEY is set")
+    if settings.smtp_host and (not settings.smtp_user or not settings.smtp_password):
+        issues.append("SMTP_USER and SMTP_PASSWORD required when SMTP_HOST is set")
     if issues:
         msg = "Startup secret validation failed:\n  - " + "\n  - ".join(issues)
         logger.critical(msg)
@@ -122,36 +128,81 @@ async def root() -> dict:
 
 @app.get("/healthz")
 async def healthz() -> dict:
-    return {"status": "ok", "service": settings.app_name}
+    return {
+        "status": "ok",
+        "service": settings.app_name,
+        "version": settings.app_version,
+        "environment": settings.environment,
+    }
 
 
 @app.get("/readyz")
 async def readyz(request: Request) -> JSONResponse:
-    """Readiness probe — checks Redis and DB connectivity."""
+    """Readiness probe — checks Redis, DB, and external services connectivity."""
+    checks: dict[str, str] = {}
+    all_ok = True
+
+    # Redis
     redis_ok = True
-    db_ok = True
     try:
         redis = request.app.state.redis
         await redis.ping()
+        checks["redis"] = "ok"
     except Exception:
         redis_ok = False
+        checks["redis"] = "unavailable"
+        all_ok = False
+
+    # Database
+    db_ok = True
     try:
         from sqlalchemy import text
-
         from app.core.database import AsyncSessionLocal
 
         async with AsyncSessionLocal() as session:
             await session.execute(text("SELECT 1"))
+        checks["database"] = "ok"
     except Exception:
         db_ok = False
+        checks["database"] = "unavailable"
+        all_ok = False
 
-    status_code = 200 if redis_ok and db_ok else 503
+    # LLM API (optional check)
+    llm_ok = True
+    if settings.openai_api_key:
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                if settings.openai_base_url:
+                    await client.get(f"{settings.openai_base_url}/models", headers={"Authorization": f"Bearer {settings.openai_api_key}"})
+                else:
+                    await client.get("https://api.openai.com/v1/models", headers={"Authorization": f"Bearer {settings.openai_api_key}"})
+            checks["llm_api"] = "ok"
+        except Exception:
+            llm_ok = False
+            checks["llm_api"] = "unavailable"
+            # Don't fail readiness for LLM API
+    else:
+        checks["llm_api"] = "not_configured"
+
+    # Worker queue
+    queue_ok = True
+    try:
+        redis = request.app.state.redis
+        queue_len = await redis.llen("arq:queue:default")
+        checks["worker_queue"] = f"{queue_len} jobs"
+    except Exception:
+        queue_ok = False
+        checks["worker_queue"] = "unavailable"
+
+    status_code = 200 if all_ok else 503
     return JSONResponse(
         status_code=status_code,
         content={
-            "status": "ready" if redis_ok and db_ok else "degraded",
-            "redis": "ok" if redis_ok else "unavailable",
-            "database": "ok" if db_ok else "unavailable",
+            "status": "ready" if all_ok else "degraded",
+            "checks": checks,
+            "version": settings.app_version,
+            "environment": settings.environment,
         },
     )
 

@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import {
-  ArrowRightLeft,
   ScanSearch,
   Wand2,
   FlaskConical,
@@ -28,9 +27,11 @@ export function AuthShell({ children }: { children: ReactNode }) {
 
         <div className="relative flex h-full flex-col justify-between p-8 sm:p-12">
           <div className="flex items-center gap-3">
-            <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-brand-gradient shadow-[0_4px_20px_-8px_rgb(16_185_129_/_0.4)]">
-              <ArrowRightLeft className="h-5 w-5 text-white" />
-            </div>
+            <img
+              src="/logo.png"
+              alt={t("app.name")}
+              className="h-10 w-10 rounded-xl"
+            />
             <span className="text-heading-lg font-bold text-text-primary">
               {t("app.name")}
             </span>

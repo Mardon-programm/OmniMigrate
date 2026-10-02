@@ -42,6 +42,8 @@ class Settings(BaseSettings):
 
     # --- Redis ---
     redis_url: str = "redis://redis:6379/0"
+    upstash_redis_rest_url: str = ""
+    upstash_redis_rest_token: str = ""
 
     # --- OpenAI / LLM ---
     openai_api_key: str = Field(default="")
@@ -69,9 +71,19 @@ class Settings(BaseSettings):
     # --- Storage ---
     workspace_root: str = "/data/workspaces"
 
-    # --- Stripe / Billing ---
-    stripe_secret_key: str = ""
-    stripe_webhook_secret: str = ""
+    # --- SMTP / Email ---
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = "noreply@omnimigrate.app"
+    smtp_from_name: str = "OmniMigrate"
+    smtp_use_tls: bool = True
+
+    # --- Paddle / Billing ---
+    paddle_api_key: str = ""
+    paddle_vendor_id: str = ""
+    paddle_webhook_secret: str = ""
 
     # --- Observability ---
     otel_enabled: bool = False

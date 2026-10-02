@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { Navbar } from "@/components/Navbar";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -9,9 +9,11 @@ import { Admin } from "@/pages/Admin";
 import { AutonomousPipeline } from "@/pages/AutonomousPipeline";
 import { CodeUpload } from "@/pages/CodeUpload";
 import { Dashboard } from "@/pages/Dashboard";
+import { Demo } from "@/pages/Demo";
 import { ForgotPassword } from "@/pages/ForgotPassword";
 import { JobDetails } from "@/pages/JobDetails";
 import { Jobs } from "@/pages/Jobs";
+import { Landing } from "@/pages/Landing";
 import { Login } from "@/pages/Login";
 import { NotFound } from "@/pages/NotFound";
 import { Organizations } from "@/pages/Organizations";
@@ -22,37 +24,40 @@ import { ResetPassword } from "@/pages/ResetPassword";
 import { Settings } from "@/pages/Settings";
 
 function Shell() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-bg-primary">
+        <div className="text-text-tertiary">Loading...</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="relative min-h-screen bg-ambient">
-      <div className="pointer-events-none fixed inset-0 bg-grid" aria-hidden="true" />
-      <div
-        className="pointer-events-none fixed inset-0 opacity-90"
-        style={{
-          backgroundImage:
-            "radial-gradient(900px 480px at 12% -8%, rgba(16,185,129,0.10), transparent 62%), radial-gradient(820px 420px at 92% -12%, rgba(6,182,212,0.08), transparent 60%)",
-        }}
-        aria-hidden="true"
-      />
-      <div className="pointer-events-none fixed inset-x-0 top-0 h-24 bg-gradient-to-b from-primary/10 to-transparent" aria-hidden="true" />
-      <div className="noise" aria-hidden="true" />
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[110] focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-slate-950"
-      >
-        Skip to content
-      </a>
+    <div className="relative min-h-screen bg-bg-primary">
       <div className="relative">
         {user && <Navbar />}
         <main id="main-content">
           <Routes>
+            {/* Public routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
 
+            {/* Demo page - public */}
+            <Route path="/demo" element={<Demo />} />
+
+            {/* Landing page for unauthenticated users */}
             <Route
               path="/"
+              element={user ? <Navigate to="/dashboard" replace /> : <Landing />}
+            />
+
+            {/* Protected routes */}
+            <Route
+              path="/dashboard"
               element={
                 <ProtectedRoute>
                   <Dashboard />

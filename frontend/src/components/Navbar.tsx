@@ -1,5 +1,5 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { ArrowRightLeft, LogOut, Settings, TerminalSquare, ChevronDown } from "lucide-react";
+import { LogOut, Settings, TerminalSquare, ChevronDown } from "lucide-react";
 
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useAuth } from "@/context/AuthContext";
@@ -44,9 +44,11 @@ export function Navbar() {
       <div className="mx-auto max-w-7xl">
         <div className="flex h-16 items-center justify-between px-4 sm:px-6">
           <Link to="/" className="group flex items-center gap-3" aria-label={t("app.name")}>
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-brand-gradient shadow-[0_4px_20px_-8px_rgb(16_185_129_/_0.4)] transition-all duration-fast group-hover:scale-105">
-              <ArrowRightLeft className="h-5 w-5 text-white" />
-            </div>
+            <img
+              src="/logo.png"
+              alt={t("app.name")}
+              className="h-9 w-9 rounded-xl transition-all duration-fast group-hover:scale-105"
+            />
             <div className="hidden sm:block leading-tight">
               <span className="block text-heading-sm font-semibold text-text-primary">
                 {t("app.name")}

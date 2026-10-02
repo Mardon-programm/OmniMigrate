@@ -17,7 +17,8 @@ from app.services.diff_utils import diff_stats, generate_diff
 from app.services.llm_agent import LLMAgent
 from app.services.observability import record_sandbox_result
 from app.services.rule_engine import apply_modernization_rules
-from app.services.sandbox import CodeSandbox
+from app.services.sandbox import SandboxFactory, SandboxConfig
+from app.services.dependencies import DynamicSandbox
 
 logger = structlog.get_logger(__name__)
 
@@ -36,12 +37,25 @@ class MigrationEngine:
         session: AsyncSession,
         redis: Redis,
         llm: LLMAgent | None = None,
-        sandbox: CodeSandbox | None = None,
+        sandbox: DynamicSandbox | None = None,
     ) -> None:
         self.session = session
         self.redis = redis
         self.llm = llm or LLMAgent()
-        self.sandbox = sandbox or CodeSandbox()
+        
+        # Use DynamicSandbox with Docker for production security
+        sandbox_config = SandboxConfig(
+            timeout_seconds=settings.sandbox_timeout_seconds,
+            memory_limit="512m",
+            cpu_limit=1.0,
+            network_disabled=True,
+            read_only_rootfs=True,
+        )
+        self.sandbox = sandbox or DynamicSandbox(
+            config=sandbox_config,
+            enabled=settings.sandbox_enabled,
+            image="python:3.12-slim",
+        )
 
     # --- State helpers --------------------------------------------------
     async def _push_state(
@@ -141,7 +155,7 @@ class MigrationEngine:
             )
             await self._persist(job)
 
-            verification = self.sandbox.verify(output_code)
+            verification = self.sandbox.verify_with_deps(output_code)
             attempt = 0
             while not verification.success and attempt < settings.max_self_heal_attempts:
                 attempt += 1
@@ -163,7 +177,7 @@ class MigrationEngine:
                 output_code = healed
                 await self._persist(job)
 
-                verification = self.sandbox.verify(healed)
+                verification = self.sandbox.verify_with_deps(healed)
 
             if not verification.success:
                 record_sandbox_result(success=False)
