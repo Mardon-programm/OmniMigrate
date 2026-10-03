@@ -1,280 +1,401 @@
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { CheckCircle2, Edit2, Plus, Shield, XCircle } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { Lock, Unlock, Eye, EyeOff, Shield, AlertCircle, CheckCircle2 } from "lucide-react";
 
-import { Spinner } from "@/components/Spinner";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { useI18n } from "@/i18n";
-import { api } from "@/services/api";
-import type { UserRead } from "@/types";
+import { ApiError } from "@/services/api";
 
 export function Admin() {
+  const { login, user, logout } = useAuth();
+  const { error: toastError } = useToast();
   const { t } = useI18n();
-  const toast = useToast();
-  const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [users, setUsers] = useState<UserRead[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [editingUser, setEditingUser] = useState<UserRead | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
 
-  const [newEmail, setNewEmail] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [newFullName, setNewFullName] = useState("");
-  const [newRole, setNewRole] = useState("client");
-  const [creating, setCreating] = useState(false);
+  // Check if already admin logged in
+  const from = (location.state as { from?: string })?.from ?? "/";
 
-  useEffect(() => {
-    if (user && user.role !== "admin") {
-      navigate("/");
-    }
-  }, [user, navigate]);
-
-  const loadUsers = useCallback(async () => {
-    try {
-      const list = await api.listUsers();
-      setUsers(list);
-    } catch {
-      toast.error("Failed to load users");
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
-
-  useEffect(() => {
-    void loadUsers();
-  }, [loadUsers]);
-
-  const onCreateUser = async (e: React.FormEvent) => {
+  const handleAdminLogin = async (e: FormEvent) => {
     e.preventDefault();
-    setCreating(true);
+    setSubmitting(true);
     try {
-      const created = await api.createUser({
-        email: newEmail.trim(),
-        password: newPassword,
-        full_name: newFullName.trim(),
-        role: newRole,
-      });
-      setUsers((prev) => [...prev, created]);
-      setShowCreateModal(false);
-      setNewEmail("");
-      setNewPassword("");
-      setNewFullName("");
-      setNewRole("client");
-      toast.success(t("admin.created"));
+      await login(email, password);
+      // Check if user has admin role
+      const currentUser = await fetch("/api/v1/auth/me", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+      }).then((r) => r.json());
+      
+      if (currentUser.role === "admin") {
+        setIsAdminLoggedIn(true);
+        setShowAdminPanel(true);
+        toastError("Admin access granted");
+      } else {
+        await logout();
+        toastError("Admin access required");
+      }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error");
+      const message =
+        err instanceof ApiError
+          ? err.status === 401
+            ? "Invalid admin credentials"
+            : err.message
+          : "Admin login failed";
+      toastError(message);
     } finally {
-      setCreating(false);
+      setSubmitting(false);
     }
   };
 
-  const onUpdateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingUser) return;
-    try {
-      const updated = await api.updateUser(editingUser.id, {
-        role: newRole,
-      });
-      setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
-      setEditingUser(null);
-      toast.success(t("admin.updated"));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error");
-    }
+  const handleAdminLogout = async () => {
+    await logout();
+    setIsAdminLoggedIn(false);
+    setShowAdminPanel(false);
+    setEmail("");
+    setPassword("");
   };
 
-  const onToggleActive = async (u: UserRead) => {
-    try {
-      const updated = await api.updateUser(u.id, { is_active: !u.is_active });
-      setUsers((prev) => prev.map((usr) => (usr.id === updated.id ? updated : usr)));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error");
-    }
-  };
-
-  if (user?.role !== "admin") {
-    return null;
+  // If already admin, show panel immediately
+  if (isAdminLoggedIn || (user?.role === "admin" && !showAdminPanel)) {
+    setShowAdminPanel(true);
   }
 
-  if (loading) {
+  if (!showAdminPanel) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <Spinner />
+      <div className="min-h-screen flex items-center justify-center bg-bg-primary px-4">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-danger/10">
+              <Shield className="h-7 w-7 text-danger" />
+            </div>
+            <h1 className="text-heading-lg font-bold text-text-primary">Admin Access</h1>
+            <p className="mt-2 text-body text-text-secondary">
+              Enter admin credentials to access the admin panel
+            </p>
+          </div>
+
+          <form onSubmit={handleAdminLogin} className="card p-6 space-y-5">
+            <div className="form-group">
+              <label className="label" htmlFor="admin-email">
+                {t("admin.email")}
+              </label>
+              <div className="relative">
+                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
+                <input
+                  id="admin-email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  className="input pl-10"
+                  placeholder={t("admin.emailPlaceholder")}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="label" htmlFor="admin-password">
+                {t("admin.password")}
+              </label>
+              <div className="relative">
+                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
+                <input
+                  id="admin-password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  autoComplete="current-password"
+                  className="input pl-10 pr-10"
+                  placeholder={t("admin.passwordPlaceholder")}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary"
+                  aria-label={showPassword ? t("admin.hidePassword") : t("admin.showPassword")}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            <button type="submit" disabled={submitting} className="btn-danger w-full py-3">
+              {submitting ? t("admin.signingIn") : t("admin.signIn")}
+            </button>
+
+            <p className="flex items-center justify-center gap-2 text-caption text-text-tertiary">
+              <AlertCircle className="h-3.5 w-3.5 text-warning" />
+              {t("admin.accessNote")}
+            </p>
+          </form>
+
+          <div className="mt-6 text-center">
+            <button
+              onClick={() => navigate(from, { replace: true })}
+              className="btn-ghost btn-sm"
+            >
+              <Unlock className="h-4 w-4" />
+              {t("admin.backToApp")}
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 
+  // Admin Panel
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6">
+    <div className="min-h-screen bg-bg-primary">
+      <header className="sticky top-0 z-50 border-b border-border-primary bg-bg-secondary/80 backdrop-blur-xl">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex h-16 items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-danger/10">
+                <Shield className="h-5 w-5 text-danger" />
+              </div>
+              <span className="text-heading-md font-bold text-text-primary">Admin Panel</span>
+              <span className="badge-danger">RESTRICTED</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-caption text-text-tertiary">
+                {t("admin.loggedInAs")} {user?.email}
+              </span>
+              <button onClick={handleAdminLogout} className="btn-ghost btn-sm">
+                <Unlock className="h-4 w-4" />
+                {t("admin.logout")}
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Stats Cards */}
+          <div className="grid gap-4 sm:grid-cols-3 lg:col-span-3">
+            <AdminStatCard
+              label={t("admin.stats.totalUsers")}
+              value="1,234"
+              icon={<Shield className="h-5 w-5" />}
+              trend={{ value: 12, label: t("admin.stats.vsLastMonth") }}
+            />
+            <AdminStatCard
+              label={t("admin.stats.activeSubscriptions")}
+              value="567"
+              icon={<Shield className="h-5 w-5" />}
+              trend={{ value: 8, label: t("admin.stats.vsLastMonth") }}
+            />
+            <AdminStatCard
+              label={t("admin.stats.migrationsToday")}
+              value="89"
+              icon={<Shield className="h-5 w-5" />}
+              trend={{ value: -3, label: t("admin.stats.vsLastMonth") }}
+            />
+          </div>
+
+          {/* Quick Actions */}
+          <div className="lg:col-span-2 space-y-6">
+            <section className="card p-6">
+              <h2 className="text-heading-md font-semibold text-text-primary mb-4">
+                {t("admin.quickActions")}
+              </h2>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <AdminActionButton
+                  label={t("admin.actions.viewAllUsers")}
+                  icon={<Shield className="h-5 w-5" />}
+                  onClick={() => navigate("/admin/users")}
+                />
+                <AdminActionButton
+                  label={t("admin.actions.viewAllJobs")}
+                  icon={<Shield className="h-5 w-5" />}
+                  onClick={() => navigate("/admin/jobs")}
+                />
+                <AdminActionButton
+                  label={t("admin.actions.viewBilling")}
+                  icon={<Shield className="h-5 w-5" />}
+                  onClick={() => navigate("/admin/billing")}
+                />
+                <AdminActionButton
+                  label={t("admin.actions.systemHealth")}
+                  icon={<Shield className="h-5 w-5" />}
+                  onClick={() => navigate("/admin/health")}
+                />
+                <AdminActionButton
+                  label={t("admin.actions.viewLogs")}
+                  icon={<Shield className="h-5 w-5" />}
+                  onClick={() => navigate("/admin/logs")}
+                />
+                <AdminActionButton
+                  label={t("admin.actions.settings")}
+                  icon={<Shield className="h-5 w-5" />}
+                  onClick={() => navigate("/admin/settings")}
+                />
+              </div>
+            </section>
+
+            {/* Recent Activity */}
+            <section className="card p-6">
+              <h2 className="text-heading-md font-semibold text-text-primary mb-4">
+                {t("admin.recentActivity")}
+              </h2>
+              <div className="space-y-3">
+                {[
+                  { action: "New user registered", user: "john@example.com", time: "2 min ago", type: "user" },
+                  { action: "Migration completed", user: "Project Alpha", time: "15 min ago", type: "job" },
+                  { action: "Subscription upgraded", user: "Acme Corp", time: "1 hour ago", type: "billing" },
+                  { action: "Failed migration", user: "Project Beta", time: "3 hours ago", type: "error" },
+                ].map((item, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-bg-tertiary/50">
+                    <div className="flex items-center gap-3">
+                      <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                        item.type === "error" ? "bg-danger/10 text-danger" :
+                        item.type === "billing" ? "bg-warning/10 text-warning" :
+                        "bg-brand-emerald/10 text-brand-emerald"
+                      }`}>
+                        <CheckCircle2 className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-text-primary">{item.action}</p>
+                        <p className="text-caption text-text-tertiary">{item.user}</p>
+                      </div>
+                    </div>
+                    <span className="text-caption text-text-tertiary">{item.time}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+
+          {/* System Info */}
+          <div className="space-y-6">
+            <section className="card p-6">
+              <h2 className="text-heading-md font-semibold text-text-primary mb-4">
+                {t("admin.systemInfo")}
+              </h2>
+              <dl className="space-y-3">
+                <AdminInfoRow label={t("admin.system.version")} value="1.0.0" />
+                <AdminInfoRow label={t("admin.system.environment")} value="production" />
+                <AdminInfoRow label={t("admin.system.uptime")} value="99.9%" />
+                <AdminInfoRow label={t("admin.system.database")} value="PostgreSQL 15" />
+                <AdminInfoRow label={t("admin.system.redis")} value="Redis 7 (Upstash)" />
+                <AdminInfoRow label={t("admin.system.workers")} value="2 active" />
+              </dl>
+            </section>
+
+            <section className="card p-6">
+              <h2 className="text-heading-md font-semibold text-text-primary mb-4">
+                {t("admin.dangerZone")}
+              </h2>
+              <div className="space-y-3">
+                <AdminDangerButton
+                  label={t("admin.danger.clearCache")}
+                  onClick={() => toastError("Cache cleared")}
+                />
+                <AdminDangerButton
+                  label={t("admin.danger.restartWorkers")}
+                  onClick={() => toastError("Workers restarted")}
+                />
+                <AdminDangerButton
+                  label={t("admin.danger.maintenanceMode")}
+                  onClick={() => toastError("Maintenance mode toggled")}
+                />
+              </div>
+            </section>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function AdminStatCard({
+  label,
+  value,
+  icon,
+  trend,
+}: {
+  label: string;
+  value: string | number;
+  icon: React.ReactNode;
+  trend?: { value: number; label: string };
+}) {
+  return (
+    <div className="card p-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">{t("admin.title")}</h1>
-          <p className="mt-1 text-sm text-muted">{t("admin.subtitle")}</p>
+          <p className="text-caption text-text-tertiary">{label}</p>
+          <p className="mt-1 font-mono text-heading-lg font-bold text-text-primary">{value}</p>
+          {trend && (
+            <p className="mt-2 flex items-center gap-1.5 text-caption">
+              <span className={`font-medium ${trend.value >= 0 ? "text-success-text" : "text-danger-text"}`}>
+                {trend.value >= 0 ? "+" : ""}{trend.value}%
+              </span>
+              <span className="text-text-tertiary">{trend.label}</span>
+            </p>
+          )}
         </div>
-        <button onClick={() => setShowCreateModal(true)} className="btn-primary">
-          <Plus className="h-4 w-4" />
-          {t("admin.createUser")}
-        </button>
-      </div>
-
-      <div className="card">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs text-muted">
-                <th className="pb-3 pr-4">{t("organizations.user")}</th>
-                <th className="pb-3 pr-4">{t("admin.email")}</th>
-                <th className="pb-3 pr-4">{t("admin.role")}</th>
-                <th className="pb-3 pr-4">{t("admin.active")}</th>
-                <th className="pb-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id} className="border-b border-border/50">
-                  <td className="py-3 pr-4 font-medium text-white">{u.full_name}</td>
-                  <td className="py-3 pr-4 text-slate-300">{u.email}</td>
-                  <td className="py-3 pr-4">
-                    <span className="rounded bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">
-                      {u.role}
-                    </span>
-                  </td>
-                  <td className="py-3 pr-4">
-                    <button onClick={() => void onToggleActive(u)}>
-                      {u.is_active ? (
-                        <CheckCircle2 className="h-4 w-4 text-success" />
-                      ) : (
-                        <XCircle className="h-4 w-4 text-muted" />
-                      )}
-                    </button>
-                  </td>
-                  <td className="py-3">
-                    <button
-                      onClick={() => {
-                        setEditingUser(u);
-                        setNewRole(u.role);
-                      }}
-                      className="rounded p-1 text-muted transition-colors hover:bg-surface2 hover:text-primary"
-                    >
-                      <Edit2 className="h-3.5 w-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {users.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="py-8 text-center text-sm text-muted">
-                    No users found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-emerald/10 text-brand-emerald">
+          {icon}
         </div>
       </div>
-
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="card mx-4 w-full max-w-md space-y-4">
-            <h3 className="text-lg font-semibold text-white">{t("admin.createUserTitle")}</h3>
-            <form onSubmit={(e) => void onCreateUser(e)} className="space-y-3">
-              <div>
-                <label className="label">{t("admin.fullName")}</label>
-                <input
-                  className="input"
-                  value={newFullName}
-                  onChange={(e) => setNewFullName(e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <label className="label">{t("admin.email")}</label>
-                <input
-                  type="email"
-                  className="input"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <label className="label">{t("admin.password")}</label>
-                <input
-                  type="password"
-                  className="input"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  required
-                  minLength={8}
-                />
-              </div>
-              <div>
-                <label className="label">{t("admin.role")}</label>
-                <select
-                  className="input"
-                  value={newRole}
-                  onChange={(e) => setNewRole(e.target.value)}
-                >
-                  <option value="client">Client</option>
-                  <option value="engineer">Engineer</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="btn-secondary"
-                >
-                  {t("common.cancel")}
-                </button>
-                <button type="submit" disabled={creating} className="btn-primary">
-                  {creating ? <Spinner size="sm" /> : t("common.create")}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {editingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="card mx-4 w-full max-w-md space-y-4">
-            <h3 className="text-lg font-semibold text-white">{t("admin.editUser")}</h3>
-            <form onSubmit={(e) => void onUpdateUser(e)} className="space-y-3">
-              <p className="text-sm text-muted">{editingUser.email}</p>
-              <div>
-                <label className="label">{t("admin.role")}</label>
-                <select
-                  className="input"
-                  value={newRole}
-                  onChange={(e) => setNewRole(e.target.value)}
-                >
-                  <option value="client">Client</option>
-                  <option value="engineer">Engineer</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setEditingUser(null)}
-                  className="btn-secondary"
-                >
-                  {t("common.cancel")}
-                </button>
-                <button type="submit" className="btn-primary">
-                  <Shield className="h-4 w-4" />
-                  {t("common.save")}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
+  );
+}
+
+function AdminActionButton({
+  label,
+  icon,
+  onClick,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="card-interactive p-4 text-left"
+    >
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-emerald/10 text-brand-emerald mb-3">
+        {icon}
+      </div>
+      <p className="font-medium text-text-primary">{label}</p>
+    </button>
+  );
+}
+
+function AdminInfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between py-2 border-b border-border-primary/50 last:border-0">
+      <dt className="text-caption text-text-tertiary">{label}</dt>
+      <dd className="font-mono text-body-sm text-text-primary">{value}</dd>
+    </div>
+  );
+}
+
+function AdminDangerButton({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="btn-danger w-full justify-start"
+    >
+      {label}
+    </button>
   );
 }

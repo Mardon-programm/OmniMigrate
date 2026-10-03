@@ -85,6 +85,10 @@ class Settings(BaseSettings):
     paddle_vendor_id: str = ""
     paddle_webhook_secret: str = ""
 
+    # --- Admin ---
+    admin_email: str = ""
+    admin_password: str = ""
+
     # --- Observability ---
     otel_enabled: bool = False
     otel_service_name: str = "omnimigrate-backend"
