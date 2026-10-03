@@ -54,7 +54,7 @@ const FEATURES = [
 const PRICING = [
   {
     name: "landing.pricing.starter",
-    price: "$0",
+    price: "$19",
     period: "/month",
     description: "landing.pricing.starterDesc",
     features: [
@@ -63,12 +63,12 @@ const PRICING = [
       "landing.pricing.feat3",
       "landing.pricing.feat4",
     ],
-    cta: "landing.pricing.getStarted",
+    cta: "landing.pricing.getEarlyAccess",
     popular: false,
   },
   {
     name: "landing.pricing.pro",
-    price: "$49",
+    price: "$79",
     period: "/month",
     description: "landing.pricing.proDesc",
     features: [
@@ -79,7 +79,7 @@ const PRICING = [
       "landing.pricing.feat5",
       "landing.pricing.feat6",
     ],
-    cta: "landing.pricing.startTrial",
+    cta: "landing.pricing.getEarlyAccess",
     popular: true,
   },
   {
@@ -95,7 +95,6 @@ const PRICING = [
       "landing.pricing.feat5",
       "landing.pricing.feat6",
       "landing.pricing.feat7",
-      "landing.pricing.feat8",
     ],
     cta: "landing.pricing.contactSales",
     popular: false,
