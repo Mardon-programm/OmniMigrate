@@ -16,6 +16,8 @@ import {
 
 import { useI18n } from "@/i18n";
 
+const MARKETING_URL = import.meta.env.VITE_MARKETING_URL || "https://omni-migrate-company.vercel.app";
+
 const FEATURES = [
   {
     icon: FileDiff,
@@ -143,9 +145,14 @@ export function Landing() {
               <Link to="/login" className="btn-ghost btn-sm hidden sm:inline-flex">
                 {t("landing.nav.signIn")}
               </Link>
-              <Link to="/register" className="btn-primary btn-sm">
+              <a
+                href={`${MARKETING_URL}/auth?plan=pro`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-primary btn-sm hidden sm:inline-flex"
+              >
                 {t("landing.nav.getStarted")}
-              </Link>
+              </a>
             </div>
           </div>
         </div>
@@ -173,10 +180,15 @@ export function Landing() {
               {t("landing.hero.subtitle")}
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
-              <Link to="/register" className="btn-primary btn-lg w-full sm:w-auto">
+              <a
+                href={`${MARKETING_URL}/auth?plan=pro`}
+                className="btn-primary btn-lg w-full sm:w-auto"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 <Rocket className="h-5 w-5" />
                 {t("landing.hero.ctaPrimary")}
-              </Link>
+              </a>
               <Link to="#demo" className="btn-secondary btn-lg w-full sm:w-auto">
                 <Code2 className="h-5 w-5" />
                 {t("landing.hero.ctaSecondary")}
@@ -333,15 +345,17 @@ export function Landing() {
                     </li>
                   ))}
                 </ul>
-                <Link
-                  to="/register"
+                <a
+                  href={`${MARKETING_URL}/auth?plan=${plan.name === "Professional" ? "pro" : plan.name === "Enterprise" ? "enterprise" : "starter"}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className={`btn-primary w-full ${
                     plan.popular ? "" : "bg-bg-tertiary border border-border-primary text-text-primary hover:bg-brand-emerald/10 hover:border-brand-emerald/30"
                   }`}
                 >
                   {t(plan.cta)}
                   <ArrowRight className="h-4 w-4" />
-                </Link>
+                </a>
               </div>
             ))}
           </div>
@@ -357,10 +371,15 @@ export function Landing() {
           <p className="text-body-lg text-white/80 max-w-2xl mx-auto mb-8">
             {t("landing.cta.subtitle")}
           </p>
-          <Link to="/register" className="btn-accent btn-lg px-8">
+          <a
+            href={`${MARKETING_URL}/auth?plan=pro`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-accent btn-lg px-8"
+          >
             {t("landing.cta.button")}
             <ArrowRight className="h-5 w-5" />
-          </Link>
+          </a>
         </div>
       </section>
 
