@@ -315,9 +315,9 @@ export function Landing() {
             {PRICING.map((plan, i) => (
               <div
                 key={i}
-                className={`card p-6 relative ${
+                className={`card p-6 relative transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${
                   plan.popular
-                    ? "border-brand-emerald/50 shadow-[0_0_0_1px_rgb(16_185_129_/_0.3)]"
+                    ? "border-brand-emerald/50 shadow-[0_0_0_1px_rgb(16_185_129_/_0.3)] group"
                     : ""
                 }`}
               >
@@ -326,11 +326,17 @@ export function Landing() {
                     <span className="badge-primary">{t("landing.pricing.popular")}</span>
                   </div>
                 )}
+                {/* Pro card glow effect */}
+                {plan.popular && (
+                  <div className="absolute inset-0 -z-10 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-brand-emerald via-brand-emerald/50 to-brand-cyan/50 blur-2xl" />
+                  </div>
+                )}
                 <h3 className="text-heading-md font-semibold text-text-primary mb-1">
                   {t(plan.name)}
                 </h3>
                 <p className="text-caption text-text-tertiary mb-6">{t(plan.description)}</p>
-                <div className="mb-6">
+                <div className="mb-6 relative z-1">
                   <span className="text-display-lg font-extrabold text-text-primary">
                     {plan.price}
                   </span>
@@ -348,7 +354,7 @@ export function Landing() {
                   href={`${MARKETING_URL}/auth?plan=${plan.name === "Professional" ? "pro" : plan.name === "Enterprise" ? "enterprise" : "starter"}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`btn-primary w-full ${
+                  className={`btn-primary w-full relative z-1 ${
                     plan.popular ? "" : "bg-bg-tertiary border border-border-primary text-text-primary hover:bg-brand-emerald/10 hover:border-brand-emerald/30"
                   }`}
                 >
