@@ -101,6 +101,79 @@ const PRICING = [
   },
 ];
 
+const PACKS = [
+  {
+    name: "landing.packs.pack10",
+    price: "$5",
+    period: "landing.pricing.oneTime",
+    description: "landing.packs.pack10Desc",
+    features: [
+      "landing.packs.packFeat1",
+      "landing.packs.packFeat2",
+      "landing.packs.packFeat3",
+    ],
+    cta: "landing.packs.buyPack",
+    migrations: 10,
+    paddleKey: "PADDLE_PRICE_PACK_10",
+  },
+  {
+    name: "landing.packs.pack50",
+    price: "$19",
+    period: "landing.pricing.oneTime",
+    description: "landing.packs.pack50Desc",
+    features: [
+      "landing.packs.packFeat1",
+      "landing.packs.packFeat2",
+      "landing.packs.packFeat3",
+    ],
+    cta: "landing.packs.buyPack",
+    migrations: 50,
+    paddleKey: "PADDLE_PRICE_PACK_50",
+  },
+  {
+    name: "landing.packs.pack100",
+    price: "$35",
+    period: "landing.pricing.oneTime",
+    description: "landing.packs.pack100Desc",
+    features: [
+      "landing.packs.feat1",
+      "landing.packs.feat3",
+      "landing.packs.feat4",
+    ],
+    cta: "landing.packs.buyPack",
+    migrations: 100,
+    paddleKey: "PADDLE_PRICE_PACK_100",
+  },
+  {
+    name: "landing.packs.pack500",
+    price: "$150",
+    period: "landing.pricing.oneTime",
+    description: "landing.packs.pack500Desc",
+features: [
+      "landing.packs.packFeat1",
+      "landing.packs.packFeat3",
+      "landing.packs.packFeat4",
+    ],
+    cta: "landing.packs.buyPack",
+    migrations: 500,
+    paddleKey: "PADDLE_PRICE_PACK_500",
+  },
+  {
+    name: "landing.packs.pack1000",
+    price: "$250",
+    period: "landing.pricing.oneTime",
+    description: "landing.packs.pack1000Desc",
+    features: [
+      "landing.packs.packFeat1",
+      "landing.packs.packFeat3",
+      "landing.packs.packFeat5",
+    ],
+    cta: "landing.packs.buyPack",
+    migrations: 1000,
+    paddleKey: "PADDLE_PRICE_PACK_1000",
+  },
+];
+
 const DEMO_CODE = `def fetch_users_with_posts():
     users = User.query.all()
     for user in users:
@@ -311,58 +384,124 @@ export function Landing() {
               {t("landing.pricing.subtitle")}
             </p>
           </div>
-          <div className="grid lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {PRICING.map((plan, i) => (
-              <div
-                key={i}
-                className={`card p-6 relative transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${
-                  plan.popular
-                    ? "border-brand-emerald/50 shadow-[0_0_0_1px_rgb(16_185_129_/_0.3)] group"
-                    : ""
-                }`}
+
+          {/* Tabs: Monthly / Pay as you go */}
+          <div className="max-w-5xl mx-auto">
+            <div className="tabs mb-8" role="tablist">
+              <button
+                role="tab"
+                aria-selected={true}
+                className="tab tab-active"
+                data-tab="monthly"
               >
-                {plan.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="badge-primary">{t("landing.pricing.popular")}</span>
+                {t("landing.pricing.tabMonthly")}
+              </button>
+              <button
+                role="tab"
+                aria-selected={false}
+                className="tab"
+                data-tab="packs"
+              >
+                {t("landing.pricing.tabPacks")}
+              </button>
+            </div>
+
+            {/* Monthly Plans */}
+            <div id="tab-monthly" className="tab-panel" role="tabpanel">
+              <div className="grid lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
+                {PRICING.map((plan, i) => (
+                  <div
+                    key={i}
+                    className={`card p-6 relative transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${
+                      plan.popular
+                        ? "border-brand-emerald/50 shadow-[0_0_0_1px_rgb(16_185_129_/_0.3)] group"
+                        : ""
+                    }`}
+                  >
+                    {plan.popular && (
+                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                        <span className="badge-primary">{t("landing.pricing.popular")}</span>
+                      </div>
+                    )}
+                    {/* Pro card glow effect */}
+                    {plan.popular && (
+                      <div className="absolute inset-0 -z-10 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                        <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-brand-emerald via-brand-emerald/50 to-brand-cyan/50 blur-2xl" />
+                      </div>
+                    )}
+                    <h3 className="text-heading-md font-semibold text-text-primary mb-1">
+                      {t(plan.name)}
+                    </h3>
+                    <p className="text-caption text-text-tertiary mb-6">{t(plan.description)}</p>
+                    <div className="mb-6 relative z-1">
+                      <span className="text-display-lg font-extrabold text-text-primary">
+                        {plan.price}
+                      </span>
+                      <span className="text-body-sm text-text-tertiary">{plan.period}</span>
+                    </div>
+                    <ul className="space-y-3 mb-8">
+                      {plan.features.map((feat, fi) => (
+                        <li key={fi} className="flex items-start gap-3">
+                          <CheckCircle2 className="h-5 w-5 text-success-text shrink-0 mt-0.5" />
+                          <span className="text-body-sm text-text-secondary">{t(feat)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <a
+                      href={`${MARKETING_URL}/auth?plan=${plan.name === "Professional" ? "pro" : plan.name === "Enterprise" ? "enterprise" : "starter"}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`btn-primary w-full relative z-1 ${
+                        plan.popular ? "" : "bg-bg-tertiary border border-border-primary text-text-primary hover:bg-brand-emerald/10 hover:border-brand-emerald/30"
+                      }`}
+                    >
+                      {t(plan.cta)}
+                      <ArrowRight className="h-4 w-4" />
+                    </a>
                   </div>
-                )}
-                {/* Pro card glow effect */}
-                {plan.popular && (
-                  <div className="absolute inset-0 -z-10 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-brand-emerald via-brand-emerald/50 to-brand-cyan/50 blur-2xl" />
-                  </div>
-                )}
-                <h3 className="text-heading-md font-semibold text-text-primary mb-1">
-                  {t(plan.name)}
-                </h3>
-                <p className="text-caption text-text-tertiary mb-6">{t(plan.description)}</p>
-                <div className="mb-6 relative z-1">
-                  <span className="text-display-lg font-extrabold text-text-primary">
-                    {plan.price}
-                  </span>
-                  <span className="text-body-sm text-text-tertiary">{plan.period}</span>
-                </div>
-                <ul className="space-y-3 mb-8">
-                  {plan.features.map((feat, fi) => (
-                    <li key={fi} className="flex items-start gap-3">
-                      <CheckCircle2 className="h-5 w-5 text-success-text shrink-0 mt-0.5" />
-                      <span className="text-body-sm text-text-secondary">{t(feat)}</span>
-                    </li>
-                  ))}
-                </ul>
-                <a
-                  href={`${MARKETING_URL}/auth?plan=${plan.name === "Professional" ? "pro" : plan.name === "Enterprise" ? "enterprise" : "starter"}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`btn-primary w-full relative z-1 ${
-                    plan.popular ? "" : "bg-bg-tertiary border border-border-primary text-text-primary hover:bg-brand-emerald/10 hover:border-brand-emerald/30"
-                  }`}
-                >
-                  {t(plan.cta)}
-                  <ArrowRight className="h-4 w-4" />
-                </a>
+                ))}
               </div>
-            ))}
+            </div>
+
+            {/* Pay-as-you-go Packs */}
+            <div id="tab-packs" className="tab-panel hidden" role="tabpanel">
+              <div className="grid lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
+                {PACKS.map((pack, i) => (
+                  <div
+                    key={i}
+                    className="card p-6 relative transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
+                  >
+                    <h3 className="text-heading-md font-semibold text-text-primary mb-1">
+                      {t(pack.name)}
+                    </h3>
+                    <p className="text-caption text-text-tertiary mb-6">{t(pack.description)}</p>
+                    <div className="mb-6">
+                      <span className="text-display-lg font-extrabold text-text-primary">
+                        {pack.price}
+                      </span>
+                      <span className="text-body-sm text-text-tertiary">{t(pack.period)}</span>
+                    </div>
+                    <ul className="space-y-3 mb-8">
+                      {pack.features.map((feat, fi) => (
+                        <li key={fi} className="flex items-start gap-3">
+                          <CheckCircle2 className="h-5 w-5 text-success-text shrink-0 mt-0.5" />
+                          <span className="text-body-sm text-text-secondary">{t(feat)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <a
+                      href={`${MARKETING_URL}/auth?plan=${pack.name.replace("landing.packs.", "").toLowerCase()}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-primary w-full"
+                    >
+                      {t(pack.cta)}
+                      <ArrowRight className="h-4 w-4" />
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </section>
