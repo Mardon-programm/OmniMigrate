@@ -37,7 +37,9 @@ services:
       - omnimigrate-net
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      target: runtime
     container_name: omnimigrate-backend
     env_file:
       - path: backend/.env
@@ -61,7 +63,9 @@ services:
       - omnimigrate-net
 
   worker:
-    build: ./backend
+    build:
+      context: ./backend
+      target: runtime
     container_name: omnimigrate-worker
     env_file:
       - path: backend/.env

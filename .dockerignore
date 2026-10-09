@@ -1,0 +1,45 @@
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Data
+data/
+*.sqlite
+*.db
+
+# Backups
+*.bak
+*.backup
+
+# Local development
+.env
+.env.local
+.env.*.local
+
+# Docs
+docs/
+*.md
+!README.md
