@@ -15,6 +15,7 @@ from typing import Optional
 import docker
 
 from app.core.config import settings
+from app.services.sandbox import DockerSandbox
 
 logger = logging.getLogger(__name__)
 
