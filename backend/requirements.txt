@@ -9,6 +9,7 @@ alembic==1.14.0
 redis==5.2.1
 arq==0.26.1
 PyJWT==2.10.1
+python-jose[cryptography]==3.3.0
 bcrypt==4.2.1
 python-multipart==0.0.20
 libcst==1.6.0
