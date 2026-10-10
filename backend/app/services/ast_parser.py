@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import re
+import textwrap
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from typing import Optional
 
 import libcst as cst
 import libcst.helpers as cst_helpers
@@ -352,6 +354,158 @@ class ParseResult:
     findings: list[dict] = field(default_factory=list)
     parse_error: str | None = None
     python_version_suggestion: str | None = None
+    characterization_tests: list[dict] = field(default_factory=list)
+
+
+@dataclass
+class CharacterizationTest:
+    """A generated characterization test capturing current behavior."""
+    function_name: str
+    inputs: dict
+    expected_output: str
+    test_code: str
+    function_signature: str
+
+    def to_dict(self) -> dict:
+        return {
+            "function_name": self.function_name,
+            "inputs": self.inputs,
+            "expected_output": self.expected_output,
+            "test_code": self.test_code,
+            "function_signature": self.function_signature,
+        }
+
+
+class CharacterizationTestGenerator:
+    """Generates characterization tests to capture current code behavior before migration."""
+
+    def __init__(self, source_code: str, module: cst.Module):
+        self.source = source_code
+        self.module = module
+        self.wrapper = cst.MetadataWrapper(cst.parse_module(source_code))
+
+    def generate_tests(self) -> list[CharacterizationTest]:
+        """Generate characterization tests for all functions in the module."""
+        tests = []
+        for node in self.module.body:
+            if isinstance(node, cst.FunctionDef):
+                test = self._generate_test_for_function(node)
+                if test:
+                    yield test
+
+    def _generate_test_for_function(self, node: cst.FunctionDef) -> Optional["CharacterizationTest"]:
+        """Generate a characterization test for a single function."""
+        func_name = node.name.value
+        
+        # Extract function signature
+        params = []
+        for param in node.params.params:
+            param_name = param.name.value
+            annotation = ""
+            if param.annotation:
+                annotation = f": {cst_helpers.get_full_name_for_node(param.annotation) or ''}"
+            default = ""
+            if param.default:
+                default = f" = {cst_helpers.get_full_name_for_node(param.default) or '...'}"
+            params.append(f"{param_name}{annotation}{default}")
+        
+        signature = f"def {node.name.value}({', '.join(params)})"
+        
+        # Generate test inputs based on parameter types
+        test_inputs = self._generate_test_inputs(node)
+        
+        if not test_inputs:
+            return None
+            
+        # Generate test code that captures current behavior
+        test_code = self._generate_test_code(node, test_inputs)
+        
+        # For now, we capture the expected behavior by running the function
+        # In production, this would be executed in the sandbox
+        expected_output = "<RUN_IN_SANDBOX>"
+        
+        return CharacterizationTest(
+            function_name=node.name.value,
+            inputs=test_inputs,
+            expected_output=expected_output,
+            test_code=test_code,
+            function_signature=signature,
+        )
+
+    def _generate_test_inputs(self, node: cst.FunctionDef) -> list[dict]:
+        """Generate sample test inputs based on parameter annotations and defaults."""
+        inputs = []
+        for param in node.params.params:
+            param_name = param.name.value
+            annotation = ""
+            if param.annotation:
+                annotation = cst_helpers.get_full_name_for_node(param.annotation) or ""
+            
+            # Generate sample input based on type annotation
+            sample_value = self._generate_sample_value(annotation)
+            inputs.append({
+                "param": param_name,
+                "type": annotation,
+                "sample_value": sample_value,
+            })
+        return inputs
+
+    def _generate_sample_value(self, annotation: str) -> str:
+        """Generate a sample value based on type annotation."""
+        annotation_lower = annotation.lower()
+        if "int" in annotation_lower:
+            return "42"
+        elif "float" in annotation_lower:
+            return "3.14"
+        elif "str" in annotation_lower:
+            return "'sample_string'"
+        elif "bool" in annotation_lower:
+            return "True"
+        elif "list" in annotation_lower or "sequence" in annotation_lower:
+            return "[1, 2, 3]"
+        elif "dict" in annotation_lower or "mapping" in annotation_lower:
+            return '{"key": "value"}'
+        elif "optional" in annotation_lower or "union" in annotation_lower:
+            return "None"
+        else:
+            return '"sample"'
+
+    def _generate_test_code(self, node: cst.FunctionDef, inputs: list[dict]) -> str:
+        """Generate test code for the function."""
+        func_name = node.name.value
+        args = ", ".join(f"{inp['param']}={inp['sample_value']}" for inp in inputs)
+        
+        test_code = f'''def test_{node.name.value}_characterization():
+    """Characterization test for {node.name.value} - captures current behavior."""
+    from {self._get_module_name()} import {node.name.value}
+    
+    # Inputs
+{chr(10).join(f"    {inp['param']} = {inp['sample_value']}" for inp in inputs)}
+    
+    # Execute
+    result = {node.name.value}({", ".join(f"{inp['param']}={inp['param']}" for inp in inputs)})
+    
+    # Capture result for comparison after migration
+    expected_output = "<RUN_IN_SANDBOX>"
+    actual_output = result
+    
+    assert str(actual_output) == str(expected_output), f"Behavior changed: {{actual_output}} != {{expected_output}}"
+'''
+        return textwrap.dedent(test_code).strip()
+
+    def _get_module_name(self) -> str:
+        """Extract module name from source."""
+        # In practice, this would be derived from the file path
+        return "module_under_test"
+
+    def to_dict(self) -> dict:
+        return {
+            "function_name": self.function_name,
+            "inputs": self.inputs,
+            "expected_output": self.expected_output,
+            "test_code": self.test_code,
+            "function_signature": self.function_signature,
+        }
 
 
 def analyze_python_source(source: str) -> ParseResult:
@@ -374,7 +528,16 @@ def analyze_python_source(source: str) -> ParseResult:
     visitor = _DeprecationVisitor()
     wrapper.visit(visitor)
     findings = [f.to_dict() for f in visitor.findings]
-    return ParseResult(success=True, findings=findings)
+    
+    # Generate characterization tests for behavior capture
+    characterization_generator = CharacterizationTestGenerator(source, module)
+    characterization_tests = [test.to_dict() for test in characterization_generator.generate_tests()]
+    
+    return ParseResult(
+        success=True, 
+        findings=findings,
+        characterization_tests=characterization_tests
+    )
 
 
 SUPPORTED_LANGUAGES: dict[str, str] = {

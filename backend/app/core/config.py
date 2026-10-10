@@ -89,6 +89,12 @@ class Settings(BaseSettings):
     admin_email: str = ""
     admin_password: str = ""
 
+    # --- Enterprise / Air-Gapped Mode ---
+    air_gapped_mode: bool = False
+    local_llm_endpoint: str = ""  # e.g., http://localhost:11434/v1 for Ollama
+    local_llm_model: str = "deepseek-coder:33b"
+    allow_external_api_calls: bool = True
+
     # --- Observability ---
     otel_enabled: bool = False
     otel_service_name: str = "omnimigrate-backend"

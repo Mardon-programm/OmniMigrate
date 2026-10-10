@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import re
+from typing import Optional
 
 import libcst as cst
 import libcst.helpers as cst_helpers
@@ -29,17 +30,17 @@ class _ModernizationTransformer(cst.CSTTransformer):
     def leave_Import(
         self, original_node: cst.Import, updated_node: cst.Import
     ) -> cst.Import | cst.RemovalSentinel:
-        # Remove imports of modules that no longer exist in modern Python.
+        """Remove imports of modules that no longer exist in modern Python."""
         remaining = []
         removed = False
         for alias in updated_node.names:
             name = cst_helpers.get_full_name_for_node(alias.name) or ""
             if name.split(".")[0] in REMOVED_MODULES:
                 removed = True
+                self.applied_rules.append(f"removed import of {name}")
             else:
                 remaining.append(alias)
         if removed:
-            self.applied_rules.append("removed import of module removed from stdlib")
             if remaining:
                 return updated_node.with_changes(names=remaining)
             return cst.RemoveFromParent()
@@ -163,6 +164,181 @@ def apply_modernization_rules(source: str) -> RuleEngineResult:
 
     Used as a no-key fallback provider; idempotent by design.
     """
+    try:
+        module = cst.parse_module(source)
+    except cst.ParserSyntaxError:
+        logger.warning("Local rule engine skipped: source could not be parsed")
+        new_source, applied = _py2_regex_modernize(source)
+        return RuleEngineResult(code=new_source, applied_rules=applied)
+
+    transformer = _ModernizationTransformer()
+    new_module = module.visit(transformer)
+    new_source = new_module.code
+    new_source = _ensure_timezone_import(new_source, transformer.needs_timezone_import)
+    return RuleEngineResult(code=new_source, applied_rules=transformer.applied_rules)
+
+
+# =============================================================================
+# HYBRID TRANSFORM ENGINE - Clear separation of Deterministic vs LLM
+# =============================================================================
+
+@dataclasses.dataclass
+class TransformStage:
+    """Represents a single transformation stage."""
+    name: str
+    description: str
+    applied_rules: list[str]
+    code: str
+
+
+@dataclasses.dataclass
+class HybridTransformResult:
+    """Result of hybrid transformation with clear stage separation."""
+    stages: list[TransformStage]
+    final_code: str
+    deterministic_applied: list[str]
+    llm_applied: list[str]
+
+    def total_rules_applied(self) -> int:
+        return len(self.deterministic_applied) + len(self.llm_applied)
+
+
+class HybridTransformEngine:
+    """
+    Hybrid Transform Engine - Clear separation of deterministic and LLM-based transformations.
+    
+    Pipeline:
+    1. Stage 1: Deterministic AST codemods (LibCST) - fast, deterministic, no API calls
+    2. Stage 2: LLM-based transformations - semantic, context-aware
+    3. Stage 3: Self-healing loop (sandbox verification + LLM fix)
+    """
+    
+    def __init__(self, rule_engine=None, llm_agent=None, sandbox=None):
+        self.rule_engine = rule_engine
+        self.llm_agent = llm_agent
+        self.sandbox = sandbox
+    
+    async def transform(
+        self, 
+        source_code: str, 
+        context_rule: str,
+        findings: list[dict],
+        max_self_heal_attempts: int = 3
+    ) -> HybridTransformResult:
+        """
+        Execute the full hybrid transformation pipeline.
+        
+        Returns HybridTransformResult with clear stage separation.
+        """
+        stages = []
+        current_code = source_code
+        
+        # Stage 1: Deterministic AST transformations (no LLM needed)
+        deterministic_result = apply_modernization_rules(current_code)
+        stages.append(TransformStage(
+            name="deterministic_ast",
+            description="Applied deterministic AST codemods (imports, syntax, typing)",
+            applied_rules=deterministic_result.applied_rules,
+            code=deterministic_result.code
+        ))
+        current_code = deterministic_result.code
+        
+        # Stage 2: LLM-based semantic transformations (if available)
+        llm_applied = []
+        if self.llm_agent:
+            try:
+                # Build prompt with findings context
+                prompt = build_refactor_prompt(current_code, context_rule, findings)
+                llm_output = await self.llm_agent.refactor(current_code, context_rule, findings or [])
+                llm_applied = ["LLM semantic refactoring applied"]
+                
+                stages.append(TransformStage(
+                    name="llm_semantic",
+                    description="LLM-based semantic refactoring with context awareness",
+                    applied_rules=llm_applied,
+                    code=llm_output
+                ))
+                current_code = llm_output
+                llm_applied = ["LLM semantic refactoring applied"]
+            except Exception as e:
+                logger.warning(f"LLM transformation failed: {e}, falling back to deterministic only")
+                llm_applied = []
+        
+        # Stage 3: Self-healing loop with sandbox verification
+        self_heal_applied = []
+        current_code_for_healing = current_code
+        
+        for attempt in range(max_self_heal_attempts):
+            if self.sandbox:
+                verification = self.sandbox.verify(current_code_for_healing)
+                if verification.success:
+                    self_heal_applied.append(f"Sandbox verification passed on attempt {attempt + 1}")
+                    break
+                
+                # Self-healing attempt
+                error_msg = "; ".join(verification.errors[:5])
+                healed_code = await self._attempt_self_heal(
+                    current_code_for_healing, 
+                    error_msg, 
+                    context_rule
+                )
+                
+                if healed_code != current_code_for_healing:
+                    self_heal_applied.append(f"Self-heal attempt {attempt + 1}: fixed {len(verification.errors)} errors")
+                    current_code_for_healing = healed_code
+                else:
+                    self_heal_applied.append(f"Self-heal attempt {attempt + 1}: no fix found")
+                    break
+            else:
+                self_heal_applied.append("Sandbox not available, skipping self-healing")
+                break
+        
+        # Final stage
+        stages.append(TransformStage(
+            name="self_healing",
+            description=f"Sandbox verification with self-healing ({len(self_heal_applied)} attempts)",
+            applied_rules=self_heal_applied,
+            code=current_code_for_healing
+        ))
+        
+        # Collect all applied rules
+        deterministic_rules = []
+        llm_rules = []
+        
+        for stage in stages:
+            if stage.name in ("deterministic_ast", "self_healing"):
+                deterministic_rules.extend(stage.applied_rules)
+            elif stage.name == "llm_semantic":
+                llm_rules.extend(stage.applied_rules)
+        
+        return HybridTransformResult(
+            stages=stages,
+            final_code=current_code_for_healing,
+            deterministic_applied=deterministic_rules,
+            llm_applied=llm_rules
+        )
+    
+    async def _attempt_self_heal(
+        self, 
+        broken_code: str, 
+        error: str, 
+        context_rule: str
+    ) -> str:
+        """Attempt to heal broken code using LLM."""
+        if not self.llm_agent:
+            return broken_code
+        
+        try:
+            healed = await self.llm_agent.self_heal(broken_code, error, context_rule)
+            return healed
+        except Exception as e:
+            logger.warning(f"Self-heal failed: {e}")
+            return broken_code
+
+
+# Backward compatibility
+def apply_modernization_rules(source: str) -> RuleEngineResult:
+    """Apply deterministic modernization codemods to Python source."""
     try:
         module = cst.parse_module(source)
     except cst.ParserSyntaxError:

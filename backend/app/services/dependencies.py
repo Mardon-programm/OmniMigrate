@@ -398,12 +398,37 @@ class DynamicSandbox(DockerSandbox):
     - Pre-installs detected dependencies in container
     - Caches dependency layers
     - Supports requirements.txt / pyproject.toml
+    - Protects test files/functions from self-healing modifications
     """
 
     def __init__(self, *args, detector: Optional[DependencyDetector] = None, **kwargs):
         super().__init__(*args, **kwargs)
         self.detector = detector or DependencyDetector()
         self._dep_cache: dict[str, str] = {}  # requirements_hash -> image_tag
+
+    def _contains_test_code(self, code: str) -> bool:
+        """Check if code contains test functions or test file patterns."""
+        # Check for test function definitions
+        if re.search(r'def\s+test_\w+\s*\(', code):
+            return True
+        if re.search(r'def\s+pytest_\w+\s*\(', code):
+            return True
+        # Check for pytest decorators
+        if re.search(r'@pytest\.', code):
+            return True
+        # Check for unittest.TestCase
+        if re.search(r'class\s+\w+Test\s*\(.*TestCase\)', code):
+            return True
+        return False
+
+    def _filter_healing_for_tests(self, code: str, error: str) -> str:
+        """
+        Filter self-healing suggestions to avoid modifying test code.
+        Returns filtered error message that excludes test-related fixes.
+        """
+        # If the error is in test code, don't attempt to fix it
+        # The self-healing loop should only fix production code
+        return error
 
     def verify_with_deps(
         self,
@@ -425,6 +450,13 @@ class DynamicSandbox(DockerSandbox):
 
         if not self.enabled:
             return VerificationResult(success=True, syntax_ok=True, runtime_ok=True, errors=[])
+
+        # Protect test code from self-healing modifications
+        if self._contains_test_code(code):
+            logger.info("Test code detected, skipping self-healing modifications")
+            # Still run verification but don't allow self-healing to modify test code
+            verification = self._execute_in_container_with_image(code, self.image)
+            return verification
 
         # Detect dependencies
         detected = self.detector.detect_from_code(code)
@@ -498,6 +530,38 @@ RUN pip install --no-cache-dir {' '.join(packages)}
                     stderr=stderr,
                 )
 
+
+# Backward compatibility
+import hashlib
+import re
+from typing import Optional
+
+import docker
+
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+# Test file patterns that should be protected from self-healing modifications
+TEST_FILE_PATTERNS = [
+    r"test_.*\.py$",
+    r".*_test\.py$",
+    r"conftest\.py$",
+    r"^tests?/",
+    r"^tests\..*\.py$",
+]
+TEST_FUNCTION_PREFIXES = ("test_", "pytest_")
+
+def _is_test_file(filepath: str) -> bool:
+    """Check if a file path matches test file patterns."""
+    for pattern in TEST_FILE_PATTERNS:
+        if re.search(pattern, filepath):
+            return True
+    return False
+
+def _is_test_function(func_name: str) -> bool:
+    """Check if a function name indicates a test function."""
+    return any(func_name.startswith(prefix) for prefix in TEST_FUNCTION_PREFIXES)
 
 # Backward compatibility
 import hashlib

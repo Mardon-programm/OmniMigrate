@@ -199,11 +199,8 @@ class GitSandboxService:
     @classmethod
     def run_tests(cls, project_dir: str) -> TestRunResult:
         """Run the repo's pytest suite in an isolated Docker container."""
-        # First, detect if there's a requirements.txt or pyproject.toml
         project_path = Path(project_dir)
-        requirements_files = list(project_path.glob("requirements*.txt"))
-        pyproject = project_path / "pyproject.toml"
-
+        
         # Build a test script that installs deps and runs pytest
         test_script = f"""
 import subprocess
@@ -268,6 +265,141 @@ print("__STDERR__", result.stderr)
 
     @staticmethod
     def current_branches(project_dir: str) -> list[str]:
+        """Local branch names in the checkout (with an optional `origin/` prefix)."""
+        try:
+            proc = subprocess.run(
+                ["git", "branch", "--list", "--format", "%(refname:short)"],
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return []
+        return [b.strip() for b in (proc.stdout or "").splitlines() if b.strip()]
+
+    @staticmethod
+    def default_branch(project_dir: str) -> str:
+        """The currently checked-out branch (what `git clone` checked out by default)."""
+        try:
+            proc = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                cwd=project_dir,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return "main"
+        branch = (proc.stdout or "").strip()
+        return branch or "main"
+
+    # --- PR Creation ----------------------------------------------------------
+
+    @classmethod
+    def create_branch_and_commit(
+        cls,
+        project_dir: str,
+        branch_name: str,
+        commit_message: str,
+        changes: list[FileChange],
+    ) -> str:
+        """Create a new branch, commit changes, and return the branch name."""
+        repo = Path(project_dir)
+        
+        # Create and checkout new branch
+        cls._run(["git", "checkout", "-b", branch_name], cwd=repo)
+        
+        # Stage all changes
+        for change in changes:
+            file_path = repo / change.rel_path
+            file_path.write_text(change.after, encoding="utf-8")
+            cls._run(["git", "add", change.rel_path], cwd=repo)
+        
+        # Commit changes
+        cls._run(["git", "commit", "-m", commit_message], cwd=repo)
+        
+        return branch_name
+
+    @classmethod
+    def push_branch(cls, project_dir: str, branch_name: str, remote: str = "origin") -> bool:
+        """Push branch to remote repository."""
+        try:
+            cls._run(
+                ["git", "push", "-u", remote, branch_name],
+                cwd=Path(project_dir)
+            )
+            return True
+        except GitOperationError:
+            logger.warning("Failed to push branch %s", branch_name)
+            return False
+
+    @classmethod
+    def create_pull_request(
+        cls,
+        project_dir: str,
+        branch_name: str,
+        base_branch: str,
+        title: str,
+        body: str,
+        github_token: str,
+    ) -> Optional[str]:
+        """Create a GitHub Pull Request using GitHub API.
+        
+        Returns the PR URL if successful, None otherwise.
+        """
+        import requests
+        
+        # Get repo info from git remote
+        try:
+            remote_url = subprocess.run(
+                ["git", "config", "--get", "remote.origin.url"],
+                cwd=Path(project_dir),
+                capture_output=True,
+                text=True,
+                timeout=10,
+            ).stdout.strip()
+        except Exception:
+            logger.warning("Failed to get remote URL")
+            return None
+        
+        # Extract owner/repo from URL
+        # Format: https://github.com/owner/repo.git or git@github.com:owner/repo.git
+        repo_match = re.search(r'github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$', remote_url)
+        if not repo_match:
+            logger.warning("Could not parse GitHub repo from URL: %s", remote_url)
+            return None
+        
+        repo_full_name = repo_match.group(1)
+        api_url = f"https://api.github.com/repos/{repo_full_name}/pulls"
+        
+        headers = {
+            "Authorization": f"Bearer {github_token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        
+        payload = {
+            "title": title,
+            "head": branch_name,
+            "base": base_branch,
+            "body": body,
+        }
+        
+        try:
+            response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+            if response.status_code == 201:
+                pr_data = response.json()
+                logger.info("Created PR: %s", pr_data.get("html_url"))
+                return pr_data.get("html_url")
+            else:
+                logger.warning("Failed to create PR: %s", response.text)
+                return None
+        except Exception as e:
+            logger.warning("Failed to create PR: %s", e)
+            return None
+
+    # --- Branch introspection ---------------------------------------------
         """Local branch names in the checkout (with an optional `origin/` prefix)."""
         try:
             proc = subprocess.run(
