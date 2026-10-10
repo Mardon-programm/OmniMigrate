@@ -12,7 +12,8 @@ from pathlib import Path
 import structlog
 
 from app.core.config import settings
-from app.services.sandbox import SandboxConfig, DynamicSandbox
+from app.services.sandbox import SandboxConfig
+from app.services.dependencies import DynamicSandbox
 
 logger = structlog.get_logger(__name__)
 
