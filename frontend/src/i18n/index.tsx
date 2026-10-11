@@ -96,7 +96,13 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 export function useI18n(): I18nContextValue {
   const ctx = useContext(I18nContext);
   if (!ctx) {
-    throw new Error("useI18n must be used within an I18nProvider");
+    // Fallback for production when provider hasn't mounted yet
+    return {
+      locale: "en" as Locale,
+      setLocale: () => {},
+      t: (path: string, params?: Record<string, unknown>) => path,
+      dict: translations.en,
+    };
   }
   return ctx;
 }
