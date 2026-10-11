@@ -7,6 +7,10 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import App from "@/App";
 import "@/index.css";
 
+// Initialize Sentry and PostHog (side effects only)
+void initSentry();
+void initPostHog();
+
 const rootElement = document.getElementById("root");
 if (!rootElement) {
   throw new Error("Root element #root was not found");
