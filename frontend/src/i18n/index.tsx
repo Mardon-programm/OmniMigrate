@@ -100,7 +100,7 @@ export function useI18n(): I18nContextValue {
     return {
       locale: "en" as Locale,
       setLocale: () => {},
-      t: (path: string, params?: Record<string, unknown>) => path,
+      t: (path: string, _params?: Record<string, unknown>) => path,
       dict: translations.en,
     };
   }
