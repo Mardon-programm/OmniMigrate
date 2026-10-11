@@ -27,7 +27,7 @@ services:
     environment:
       DATABASE_URL: "postgresql+asyncpg://neondb_owner:npg_4gGM3WHNRXPQ@ep-billowing-term-b5v1z7fz-pooler.c-7.us-east-2.aws.neon.tech/neondb?ssl=require"
       REDIS_URL: redis://redis:6379/0
-      OPENAI_MODEL: "llama3-8b-8192"
+      OPENAI_MODEL: "llama-3.1-8b-instant"
     depends_on:
       redis:
         condition: service_healthy
@@ -49,7 +49,7 @@ services:
     environment:
       DATABASE_URL: "postgresql+asyncpg://neondb_owner:npg_4gGM3WHNRXPQ@ep-billowing-term-b5v1z7fz-pooler.c-7.us-east-2.aws.neon.tech/neondb?ssl=require"
       REDIS_URL: redis://redis:6379/0
-      OPENAI_MODEL: "llama3-8b-8192"
+      OPENAI_MODEL: "llama-3.1-8b-instant"
     depends_on:
       redis:
         condition: service_healthy

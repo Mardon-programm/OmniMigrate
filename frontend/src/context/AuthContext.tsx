@@ -96,7 +96,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    // Fallback for production when provider hasn't mounted yet
+    return {
+      user: null,
+      loading: true,
+      login: async () => { throw new Error("Auth not available"); },
+      register: async () => { throw new Error("Auth not available"); },
+      logout: async () => {},
+      refreshUser: async () => {},
+    };
   }
   return ctx;
 }
