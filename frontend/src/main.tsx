@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import React, { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { initSentry } from "@/lib/sentry";
@@ -18,9 +18,9 @@ if (!rootElement) {
 }
 
 createRoot(rootElement).render(
-  <React.StrictMode>
+  <StrictMode>
     <ErrorBoundary>
       <App />
     </ErrorBoundary>
-  </React.StrictMode>,
+  </StrictMode>,
 );
