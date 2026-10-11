@@ -1,25 +1,6 @@
 name: omnimigrate
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: omnimigrate-postgres
-    environment:
-      POSTGRES_USER: omnimigrate
-      POSTGRES_PASSWORD: omnimigrate
-      POSTGRES_DB: omnimigrate
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U omnimigrate -d omnimigrate"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks:
-      - omnimigrate-net
-
   redis:
     image: redis:7-alpine
     container_name: omnimigrate-redis
@@ -42,19 +23,15 @@ services:
       target: runtime
     container_name: omnimigrate-backend
     env_file:
-      - path: backend/.env
-        required: false
+      - ./backend/.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://omnimigrate:omnimigrate@postgres:5432/omnimigrate
+      DATABASE_URL: "postgresql+asyncpg://neondb_owner:npg_4gGM3WHNRXPQ@ep-billowing-term-b5v1z7fz-pooler.c-7.us-east-2.aws.neon.tech/neondb?ssl=require"
       REDIS_URL: redis://redis:6379/0
+      OPENAI_MODEL: "openai/gpt-oss-120b"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
-    command: >
-      sh -c "alembic upgrade head &&
-             uvicorn app.main:app --host 0.0.0.0 --port 8003 --workers 2"
+    command: sh -c 'echo "DATABASE_URL=$DATABASE_URL" && alembic upgrade heads && uvicorn app.main:app --host 0.0.0.0 --port 8003 --workers 2'
     ports:
       - "8003:8003"
     volumes:
@@ -68,19 +45,20 @@ services:
       target: runtime
     container_name: omnimigrate-worker
     env_file:
-      - path: backend/.env
-        required: false
+      - ./backend/.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://omnimigrate:omnimigrate@postgres:5432/omnimigrate
+      DATABASE_URL: "postgresql+asyncpg://neondb_owner:npg_4gGM3WHNRXPQ@ep-billowing-term-b5v1z7fz-pooler.c-7.us-east-2.aws.neon.tech/neondb?ssl=require"
       REDIS_URL: redis://redis:6379/0
+      OPENAI_MODEL: "openai/gpt-oss-120b"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     command: ["python", "-m", "app.worker_runner"]
     volumes:
       - workspace_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/omnimigrate:/tmp/omnimigrate
+    user: root
     networks:
       - omnimigrate-net
 
@@ -90,12 +68,11 @@ services:
     depends_on:
       - backend
     ports:
-      - "80:80"
+      - "8080:80"
     networks:
       - omnimigrate-net
 
 volumes:
-  postgres_data:
   redis_data:
   workspace_data:
 

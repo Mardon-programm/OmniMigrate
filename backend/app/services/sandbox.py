@@ -90,10 +90,11 @@ class DockerSandbox:
         """Create secure container configuration."""
         return {
             "image": self.image,
-            "command": entrypoint,
+            "entrypoint": entrypoint,
             "working_dir": workdir,
             "volumes": {
                 workdir: {"bind": workdir, "mode": "ro"},
+                "/tmp/omnimigrate": {"bind": "/tmp/omnimigrate", "mode": "rw"},
             },
             "environment": {
                 "PYTHONIOENCODING": "utf-8",
@@ -108,7 +109,7 @@ class DockerSandbox:
             "pids_limit": self.config.pids_limit,
             "network_mode": "none" if self.config.network_disabled else "bridge",
             "read_only": self.config.read_only_rootfs,
-            "tmpfs": {"/tmp": f"size={self.config.tmpfs_size},exec"} if self.config.read_only_rootfs else None,
+            "tmpfs": {"/var/tmp": f"size={self.config.tmpfs_size},exec"} if self.config.read_only_rootfs else None,
             "security_opt": ["no-new-privileges:true"],
             "cap_drop": ["ALL"],
             "detach": False,
@@ -154,15 +155,18 @@ class DockerSandbox:
 
     def _execute_in_container(self, code: str) -> VerificationResult:
         """Execute code in ephemeral Docker container."""
-        with tempfile.TemporaryDirectory(prefix="omnimigrate_sandbox_") as tmpdir:
+        with tempfile.TemporaryDirectory(prefix="omnimigrate_sandbox_", dir="/tmp/omnimigrate") as tmpdir:
             workdir = Path(tmpdir)
             code_file = workdir / "script.py"
             code_file.write_text(code, encoding="utf-8")
+            # Make files readable by container user (1000:1000)
+            os.chmod(workdir, 0o755)
+            os.chmod(code_file, 0o644)
 
             container_config = self._create_container_config(
                 code=code,
                 workdir=str(workdir),
-                entrypoint=["python", "script.py"],
+                entrypoint=["python3", "script.py"],
             )
 
             try:

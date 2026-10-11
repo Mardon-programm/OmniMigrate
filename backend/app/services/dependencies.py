@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -15,7 +16,7 @@ from typing import Optional
 import docker
 
 from app.core.config import settings
-from app.services.sandbox import DockerSandbox
+from app.services.sandbox import DockerSandbox, VerificationResult
 
 logger = logging.getLogger(__name__)
 
@@ -503,15 +504,17 @@ RUN pip install --no-cache-dir {' '.join(packages)}
 
     def _execute_in_container_with_image(self, code: str, image: str) -> VerificationResult:
         """Execute code in container with specific image."""
-        with tempfile.TemporaryDirectory(prefix="omnimigrate_sandbox_") as tmpdir:
+        with tempfile.TemporaryDirectory(prefix="omnimigrate_sandbox_", dir="/tmp/omnimigrate") as tmpdir:
             workdir = Path(tmpdir)
             code_file = workdir / "script.py"
             code_file.write_text(code, encoding="utf-8")
+            os.chmod(workdir, 0o755)
+            os.chmod(code_file, 0o644)
 
             container_config = self._create_container_config(
                 code=code,
                 workdir=str(workdir),
-                entrypoint=["python", "script.py"],
+                entrypoint=["python3", "script.py"],
             )
             container_config["image"] = image
 
@@ -522,11 +525,14 @@ RUN pip install --no-cache-dir {' '.join(packages)}
                     success=True, syntax_ok=True, runtime_ok=True, errors=[], stdout=stdout
                 )
             except docker.errors.ContainerError as e:
-                stderr = e.stderr.decode("utf-8") if isinstance(e.stderr, bytes) else str(e.stderr)
+                stderr = str(e)
+                stdout = getattr(e, 'stdout', '') or ''
+                if isinstance(stdout, bytes):
+                    stdout = stdout.decode("utf-8", errors="replace")
                 return VerificationResult(
                     success=False, syntax_ok=True, runtime_ok=False,
                     errors=[stderr.strip() or f"Exit code {e.exit_status}"],
-                    stdout=e.stdout.decode("utf-8") if e.stdout else "",
+                    stdout=stdout,
                     stderr=stderr,
                 )
 

@@ -1,15 +1,15 @@
 """Add MFA (TOTP) fields to users.
 
-Revision ID: 0005_add_user_mfa
-Revises: 0004_add_password_reset
+Revision ID: 0007
+Revises: 0006
 Create Date: 2026-08-23
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0005"
-down_revision = "0004"
+revision = "0007"
+down_revision = "0006"
 branch_labels = None
 depends_on = None
 
