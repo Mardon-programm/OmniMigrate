@@ -1,11 +1,14 @@
+# Vercel deployment configuration
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
+  "buildCommand": "cd frontend && npm run build",
+  "outputDirectory": "frontend/dist",
   "framework": "vite",
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
+  "installCommand": "cd frontend && npm ci",
+  "devCommand": "cd frontend && npm run dev",
+  "regions": ["iad1"],
+  "functions": {
+    "app/**/*.ts": {
+      "maxDuration": 30
     }
-  ]
+  }
 }

@@ -16,9 +16,27 @@ from arq.worker import create_worker
 from app.core.worker import WorkerSettings
 
 
+async def run_worker(queue_name: str) -> None:
+    """Run a single worker, handling exceptions locally."""
+    worker = create_worker(WorkerSettings, queue_name=queue_name)
+    try:
+        await worker.async_run()
+    except Exception as e:
+        import logging
+        logging.error(f"Worker {queue_name} failed: {e}", exc_info=True)
+        raise
+
+
 async def main() -> None:
-    workers = [create_worker(WorkerSettings, queue_name=q) for q in WorkerSettings.queues]
-    await asyncio.gather(*(w.async_run() for w in workers))
+    workers = [run_worker(q) for q in WorkerSettings.queues]
+    # Use return_exceptions=True to prevent one failure from cancelling others
+    results = await asyncio.gather(*workers, return_exceptions=True)
+    
+    # Check for exceptions
+    for queue_name, result in zip(WorkerSettings.queues, results):
+        if isinstance(result, Exception):
+            import logging
+            logging.error(f"Worker {queue_name} failed permanently: {result}", exc_info=result)
 
 
 if __name__ == "__main__":
