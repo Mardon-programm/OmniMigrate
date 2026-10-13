@@ -9,20 +9,17 @@
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "eslint src --ext .ts,.tsx",
-    "generate:sitemap": "node scripts/generate-sitemap.js",
-    "postinstall": "node -e \"const fs=require('fs');const pkg=JSON.parse(require('fs').readFileSync('package.json','utf8'));const r=require('react/package.json');const rd=require('react-dom/package.json');if(r.version!=='18.3.1'||require('react-dom/package.json').version!=='18.3.1'){console.error('ERROR: React version mismatch! Expected 18.3.1, got react@'+r.version+' react-dom@'+require('react-dom/package.json').version);process.exit(1);}console.log('React version OK:',require('react/package.json').version);\""
+    "generate:sitemap": "node scripts/generate-sitemap.js"
   },
   "dependencies": {
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "react-router-dom": "^6.28.1",
+    "@sentry/react": "^11.2.0",
+    "@sentry/tracing": "^7.120.4",
     "axios": "^1.7.9",
     "lucide-react": "^0.469.0",
     "posthog-js": "^1.435.6",
-    "posthog-js": "^1.435.6",
-    "@sentry/react": "^11.2.0",
-    "@sentry/tracing": "^7.120.4",
-    "lucide-react": "^0.469.0"
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-router-dom": "^6.28.1"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
@@ -41,15 +38,6 @@
   },
   "overrides": {
     "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "react/jsx-runtime": "18.3.1",
-    "react/jsx-dev-runtime": "18.3.1"
-  },
-  "resolutions": {
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "react/jsx-runtime": "18.3.1",
-    "react/jsx-dev-runtime": "18.3.1"
+    "react-dom": "18.3.1"
   }
-}
 }
