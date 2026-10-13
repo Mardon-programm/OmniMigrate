@@ -15,7 +15,10 @@ out/
 .vscode/
 *.swp
 *.swo
-*~
+
+# OS
+.DS_Store
+Thumbs.db
 
 # Environment files
 .env
@@ -36,26 +39,10 @@ pnpm-debug.log*
 coverage/
 .nyc_output/
 
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Build outputs
-dist/
-build/
-*.tsbuildinfo
-
-# Testing
-coverage/
-
-# TypeScript
-*.tsbuildinfo
+# Misc
+*.pem
+.vercel
+.turbo
 
 # Cache
 .cache/
@@ -75,11 +62,12 @@ coverage/
 logs
 *.log
 
-# Testing
-coverage/
-.nyc_output/
-
 # Misc
 *.pem
-.vercel
-*.tsbuildinfo
+*.bak
+*.tmp
+*.temp
+
+# DO NOT IGNORE FRONTEND DIRECTORY
+# !frontend/
+# !frontend/**
