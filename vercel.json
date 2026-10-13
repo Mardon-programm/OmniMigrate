@@ -4,9 +4,5 @@
   "framework": "vite",
   "installCommand": "cd frontend && npm ci",
   "devCommand": "cd frontend && npm run dev",
-  "regions": ["iad1"],
-  "functions": {
-    "app/**/*.ts": {
-      "maxDuration": 30
-    }
-  }
+  "regions": ["iad1"]
+}
