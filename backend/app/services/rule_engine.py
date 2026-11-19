@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import dataclasses
 import re
-from typing import Optional
 
 import libcst as cst
 import libcst.helpers as cst_helpers
 import structlog
+
+from app.core.config import settings
+from app.services.code_contract import CodeContractError, validate_output
 
 logger = structlog.get_logger(__name__)
 
@@ -247,8 +249,6 @@ class HybridTransformEngine:
         llm_applied = []
         if self.llm_agent:
             try:
-                # Build prompt with findings context
-                prompt = build_refactor_prompt(current_code, context_rule, findings)
                 llm_output = await self.llm_agent.refactor(current_code, context_rule, findings or [])
                 llm_applied = ["LLM semantic refactoring applied"]
                 
@@ -264,34 +264,70 @@ class HybridTransformEngine:
                 logger.warning(f"LLM transformation failed: {e}, falling back to deterministic only")
                 llm_applied = []
         
-        # Stage 3: Self-healing loop with sandbox verification
+        # Stage 3: Self-healing loop with sandbox + output-contract verification
         self_heal_applied = []
         current_code_for_healing = current_code
-        
+        contract_report = validate_output(
+            source_code,
+            current_code_for_healing,
+            min_line_ratio=settings.contract_min_line_ratio,
+            allowed_extra_imports=settings.contract_extra_imports,
+            enabled=settings.contract_enabled,
+        )
+
         for attempt in range(max_self_heal_attempts):
-            if self.sandbox:
-                verification = self.sandbox.verify(current_code_for_healing)
-                if verification.success:
-                    self_heal_applied.append(f"Sandbox verification passed on attempt {attempt + 1}")
-                    break
-                
-                # Self-healing attempt
-                error_msg = "; ".join(verification.errors[:5])
-                healed_code = await self._attempt_self_heal(
-                    current_code_for_healing, 
-                    error_msg, 
-                    context_rule
-                )
-                
-                if healed_code != current_code_for_healing:
-                    self_heal_applied.append(f"Self-heal attempt {attempt + 1}: fixed {len(verification.errors)} errors")
-                    current_code_for_healing = healed_code
+            verification = (
+                self.sandbox.verify(current_code_for_healing) if self.sandbox else None
+            )
+            sandbox_ok = verification is None or verification.success
+            if sandbox_ok and contract_report.ok:
+                if verification is None:
+                    self_heal_applied.append("Sandbox not available, skipping self-healing")
                 else:
-                    self_heal_applied.append(f"Self-heal attempt {attempt + 1}: no fix found")
-                    break
-            else:
-                self_heal_applied.append("Sandbox not available, skipping self-healing")
+                    self_heal_applied.append(
+                        f"Sandbox verification passed on attempt {attempt + 1}"
+                    )
                 break
+
+            if self.llm_agent is None:
+                if verification is not None:
+                    self_heal_applied.append(
+                        f"Self-heal attempt {attempt + 1}: no fix found"
+                    )
+                break
+
+            error_parts: list[str] = []
+            if verification is not None and not verification.success:
+                error_parts.append("; ".join(verification.errors[:5]))
+            if not contract_report.ok:
+                error_parts.append(contract_report.to_error_text())
+            healed_code = await self._attempt_self_heal(
+                current_code_for_healing,
+                "\n".join(error_parts),
+                context_rule,
+            )
+
+            if healed_code == current_code_for_healing:
+                self_heal_applied.append(
+                    f"Self-heal attempt {attempt + 1}: no fix found"
+                )
+                break
+
+            fixed = len(verification.errors) if verification is not None else 0
+            self_heal_applied.append(
+                f"Self-heal attempt {attempt + 1}: fixed {fixed} errors"
+            )
+            current_code_for_healing = healed_code
+            contract_report = validate_output(
+                source_code,
+                current_code_for_healing,
+                min_line_ratio=settings.contract_min_line_ratio,
+                allowed_extra_imports=settings.contract_extra_imports,
+                enabled=settings.contract_enabled,
+            )
+
+        if not contract_report.ok:
+            raise CodeContractError(contract_report)
         
         # Final stage
         stages.append(TransformStage(
@@ -334,20 +370,3 @@ class HybridTransformEngine:
         except Exception as e:
             logger.warning(f"Self-heal failed: {e}")
             return broken_code
-
-
-# Backward compatibility
-def apply_modernization_rules(source: str) -> RuleEngineResult:
-    """Apply deterministic modernization codemods to Python source."""
-    try:
-        module = cst.parse_module(source)
-    except cst.ParserSyntaxError:
-        logger.warning("Local rule engine skipped: source could not be parsed")
-        new_source, applied = _py2_regex_modernize(source)
-        return RuleEngineResult(code=new_source, applied_rules=applied)
-
-    transformer = _ModernizationTransformer()
-    new_module = module.visit(transformer)
-    new_source = new_module.code
-    new_source = _ensure_timezone_import(new_source, transformer.needs_timezone_import)
-    return RuleEngineResult(code=new_source, applied_rules=transformer.applied_rules)

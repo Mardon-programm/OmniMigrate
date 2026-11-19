@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 8192
     llm_fallback_to_rules: bool = True
 
+    # --- Output contract / anti-shrinkage guards ---
+    # Reject output that deletes top-level symbols, truncates the file or adds
+    # unrequested third-party imports.
+    contract_enabled: bool = True
+    contract_min_line_ratio: float = Field(default=0.75, ge=0.0, le=1.0)
+    contract_extra_imports: list[str] = Field(default_factory=list)
+
     # --- Sandbox ---
     sandbox_enabled: bool = True
     sandbox_timeout_seconds: int = 30
