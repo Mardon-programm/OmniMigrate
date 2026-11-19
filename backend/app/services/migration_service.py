@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.core.prompts import DEFAULT_CONTEXT_RULE
 from app.models import JobStatus, MigrationJob
 from app.services.ast_parser import analyze_source
+from app.services.code_contract import validate_output
 from app.services.diff_utils import diff_stats, generate_diff
 from app.services.llm_agent import LLMAgent
 from app.services.observability import record_sandbox_result
@@ -147,6 +148,18 @@ class MigrationEngine:
             else:
                 output_code = await self.llm.refactor(job.input_code, context_rule, findings)
             job.output_code = output_code
+
+            # Enforce the anti-shrinkage contract before and during healing.
+            # compile()/import checks cannot see deleted functions, so this
+            # comparison with the original source is what stops a truncated
+            # "successful" migration.
+            contract_report = validate_output(
+                job.input_code,
+                output_code,
+                min_line_ratio=settings.contract_min_line_ratio,
+                allowed_extra_imports=settings.contract_extra_imports,
+                enabled=settings.contract_enabled,
+            )
             await self._persist(job)
 
             # 3. Sandbox verification with self-healing loop.
@@ -157,7 +170,10 @@ class MigrationEngine:
 
             verification = self.sandbox.verify_with_deps(output_code)
             attempt = 0
-            while not verification.success and attempt < settings.max_self_heal_attempts:
+            contract_repairs = 0
+            while attempt < settings.max_self_heal_attempts and not (
+                verification.success and contract_report.ok
+            ):
                 attempt += 1
                 job.self_heal_attempts = attempt
                 await self._push_state(
@@ -168,7 +184,14 @@ class MigrationEngine:
                 )
                 await self._persist(job)
 
-                error_text = "; ".join(verification.errors[:5])
+                error_parts: list[str] = []
+                if not contract_report.ok:
+                    contract_repairs += 1
+                    error_parts.append(contract_report.to_error_text())
+                if not verification.success:
+                    error_parts.append("; ".join(verification.errors[:5]))
+                error_text = "\n".join(error_parts)
+
                 if use_local_rules:
                     healed = apply_modernization_rules(output_code).code
                 else:
@@ -177,7 +200,21 @@ class MigrationEngine:
                 output_code = healed
                 await self._persist(job)
 
+                contract_report = validate_output(
+                    job.input_code,
+                    healed,
+                    min_line_ratio=settings.contract_min_line_ratio,
+                    allowed_extra_imports=settings.contract_extra_imports,
+                    enabled=settings.contract_enabled,
+                )
                 verification = self.sandbox.verify_with_deps(healed)
+
+            if not contract_report.ok:
+                record_sandbox_result(success=False)
+                raise RuntimeError(
+                    "Output contract violated after self-healing: "
+                    + "; ".join(v.message for v in contract_report.violations)
+                )
 
             if not verification.success:
                 record_sandbox_result(success=False)
@@ -195,6 +232,10 @@ class MigrationEngine:
                 "duration_seconds": round(elapsed, 3),
                 "findings_count": len(findings),
                 "self_heal_attempts": attempt,
+                "contract_repairs": contract_repairs,
+                "contract_passed": contract_report.ok,
+                "contract_source_symbols": len(contract_report.contract.symbols),
+                "contract_output_symbols": len(contract_report.output_symbols),
                 "provider": provider,
                 "sandbox_stdout": verification.stdout[:2000],
                 **diff_stats(diff).to_dict(),

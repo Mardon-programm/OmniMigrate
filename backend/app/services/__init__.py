@@ -5,6 +5,7 @@ from app.services.ast_parser import (
     findings_to_text,
 )
 from app.services.chunker import CodeChunker, CodeChunk, DependencyGraph, ContextAssembler
+from app.services.code_contract import CodeContractError, build_contract, validate_output
 from app.services.diff_utils import diff_stats, generate_diff
 from app.services.dependencies import DependencyDetector, DependencyResolver, DynamicSandbox
 from app.services.llm_agent import LLMAgent, LLMUnavailableError
@@ -19,6 +20,7 @@ from app.services.sandbox import (
 __all__ = [
     "CodeChunk",
     "CodeChunker",
+    "CodeContractError",
     "CodeSandbox",
     "ContextAssembler",
     "DependencyDetector",
@@ -39,10 +41,12 @@ __all__ = [
     "analyze_python_source",
     "analyze_source",
     "apply_modernization_rules",
+    "build_contract",
     "check_syntax",
     "detect_language",
     "diff_stats",
     "findings_to_text",
     "generate_diff",
     "run_migration_job",
+    "validate_output",
 ]
