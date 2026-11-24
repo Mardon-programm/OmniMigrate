@@ -19,8 +19,12 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     repo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    source_language: Mapped[str] = mapped_column(String(64), default="python", nullable=False)
-    target_stack: Mapped[str] = mapped_column(String(64), default="python-3.12", nullable=False)
+    source_language: Mapped[str] = mapped_column(
+        String(64), default="python", nullable=False
+    )
+    target_stack: Mapped[str] = mapped_column(
+        String(64), default="python-3.12", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
@@ -33,4 +37,6 @@ class Project(Base):
 
     owner = relationship("User", backref="projects")
     organization = relationship("Organization", back_populates="projects")
-    jobs = relationship("MigrationJob", back_populates="project", cascade="all, delete-orphan")
+    jobs = relationship(
+        "MigrationJob", back_populates="project", cascade="all, delete-orphan"
+    )

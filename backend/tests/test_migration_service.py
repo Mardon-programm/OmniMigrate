@@ -26,6 +26,9 @@ class FakeSandbox:
     def verify(self, code):
         return self._results.pop(0)
 
+    def verify_with_deps(self, code, language="python", extra_packages=None):
+        return self.verify(code)
+
 
 def _ok(**kwargs):
     defaults = {
@@ -170,6 +173,95 @@ class TestHealLoop:
         assert job.status == JobStatus.failed.value
         assert job.error_message
         assert job.self_heal_attempts == 2
+
+
+class TestContractGuards:
+    CONTRACT_SOURCE = "def alpha():\n    return 1\n\ndef beta():\n    return 2\n"
+    TRUNCATED = "def alpha():\n    return 1\n"
+
+    async def test_heals_truncated_llm_output(self, db_session, monkeypatch):
+        monkeypatch.setattr(settings, "openai_api_key", "sk-test")
+        monkeypatch.setattr(settings, "max_self_heal_attempts", 2)
+        job = await _make_job(db_session, code=self.CONTRACT_SOURCE)
+        calls = {"heal": 0}
+
+        class FakeLLM:
+            async def refactor(self, code, rule, findings):
+                return TestContractGuards.TRUNCATED
+
+            async def self_heal(self, code, error, rule):
+                calls["heal"] += 1
+                assert "beta" in error
+                return TestContractGuards.CONTRACT_SOURCE
+
+        engine = MigrationEngine(
+            session=db_session,
+            redis=FakeRedis(),
+            llm=FakeLLM(),
+            sandbox=FakeSandbox(_ok(), _ok()),
+        )
+        await engine.run(job.id)
+        await db_session.refresh(job)
+
+        assert job.status == JobStatus.completed.value
+        assert calls["heal"] == 1
+        assert "def beta" in job.output_code
+        assert job.metrics["contract_passed"] is True
+        assert job.metrics["contract_repairs"] == 1
+
+    async def test_fails_when_contract_never_heals(self, db_session, monkeypatch):
+        monkeypatch.setattr(settings, "openai_api_key", "sk-test")
+        monkeypatch.setattr(settings, "max_self_heal_attempts", 1)
+        job = await _make_job(db_session, code=self.CONTRACT_SOURCE)
+
+        class FakeLLM:
+            async def refactor(self, code, rule, findings):
+                return TestContractGuards.TRUNCATED
+
+            async def self_heal(self, code, error, rule):
+                return TestContractGuards.TRUNCATED
+
+        engine = MigrationEngine(
+            session=db_session,
+            redis=FakeRedis(),
+            llm=FakeLLM(),
+            sandbox=FakeSandbox(_ok(), _ok()),
+        )
+        await engine.run(job.id)
+        await db_session.refresh(job)
+
+        assert job.status == JobStatus.failed.value
+        assert "contract" in job.error_message.lower()
+        assert "beta" in job.error_message
+        assert job.self_heal_attempts == 1
+
+    async def test_rejects_unrequested_third_party_import(
+        self, db_session, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "openai_api_key", "sk-test")
+        monkeypatch.setattr(settings, "max_self_heal_attempts", 2)
+        job = await _make_job(db_session, code=self.CONTRACT_SOURCE)
+        with_aiohttp = "import aiohttp\n" + self.CONTRACT_SOURCE
+
+        class FakeLLM:
+            async def refactor(self, code, rule, findings):
+                return with_aiohttp
+
+            async def self_heal(self, code, error, rule):
+                assert "aiohttp" in error
+                return TestContractGuards.CONTRACT_SOURCE
+
+        engine = MigrationEngine(
+            session=db_session,
+            redis=FakeRedis(),
+            llm=FakeLLM(),
+            sandbox=FakeSandbox(_ok(), _ok()),
+        )
+        await engine.run(job.id)
+        await db_session.refresh(job)
+
+        assert job.status == JobStatus.completed.value
+        assert "aiohttp" not in job.output_code
 
 
 class TestEncodeState:

@@ -1,9 +1,8 @@
 # Upstash Redis client for serverless (Vercel) environments
 # Uses REST API instead of persistent connections
 
-import json
 import os
-from typing import Any, Optional
+from typing import Optional
 
 import httpx
 
@@ -20,7 +19,7 @@ class UpstashRedis:
     def client(self) -> httpx.AsyncClient:
         if self._client is None:
             self._client = httpx.AsyncClient(
-                base_url=self.url,
+                base_url=self.url or "",
                 headers={"Authorization": f"Bearer {self.token}"},
                 timeout=10.0,
             )
@@ -73,6 +72,10 @@ class UpstashRedis:
             return r.json().get("result") == "OK"
         except Exception:
             return False
+
+    async def setex(self, key: str, ttl: int, value: str) -> bool:
+        """Redis-compatible SETEX, mapped to SET with an expiry via REST."""
+        return await self.set(key, value, ex=ttl)
 
     async def delete(self, *keys: str) -> int:
         try:
@@ -135,7 +138,13 @@ class UpstashRedis:
 
     # --- Hash operations ---
 
-    async def hset(self, name: str, key: str = None, value: str = None, mapping: dict = None) -> int:
+    async def hset(
+        self,
+        name: str,
+        key: Optional[str] = None,
+        value: Optional[str] = None,
+        mapping: Optional[dict] = None,
+    ) -> int:
         try:
             if mapping:
                 cmd = ["hset", name]

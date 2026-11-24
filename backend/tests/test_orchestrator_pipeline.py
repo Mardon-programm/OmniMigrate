@@ -1,16 +1,42 @@
 import asyncio
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 import pytest
+
 from app.core.config import settings
 from app.models import JobStatus, MigrationJob, Project
+from app.services.code_contract import CodeContractError
 from app.services.git_integrations import GitHubIntegrationService
-from app.services.git_sandbox import GitOperationError
+from app.services.git_sandbox import (
+    GitOperationError,
+    GitSandboxService,
+    TestRunResult as _TestRunResult,
+)
 from app.services.orchestrator import AutonomousMigrationOrchestrator
 from app.services.token_encryption import encrypt_token
 from tests.conftest import make_user
+
+
+def _run_tests_locally(project_dir: str) -> _TestRunResult:
+    """Run the repo's pytest suite in-process (Docker sandbox is disabled in tests)."""
+    proc = subprocess.run(
+        [sys.executable, "-m", "pytest", "-x", "-q", "--tb=short"],
+        cwd=str(project_dir),
+        capture_output=True,
+        text=True,
+        timeout=settings.git_test_timeout_seconds,
+        check=False,
+    )
+    return _TestRunResult(
+        returncode=proc.returncode,
+        success=proc.returncode in (0, 5),
+        stdout=proc.stdout,
+        stderr=proc.stderr,
+        duration_seconds=0.0,
+    )
 
 
 def _git(path: Path, *args: str) -> subprocess.CompletedProcess:
@@ -39,7 +65,9 @@ def legacy_repo(local_remote):
         _git(repo, "init", "-b", "main")
         _git(repo, "config", "user.email", "t@t.t")
         _git(repo, "config", "user.name", "T")
-        (repo / "legacy.py").write_text("for i in xrange(3):\n    print(i)\n", encoding="utf-8")
+        (repo / "legacy.py").write_text(
+            "for i in xrange(3):\n    print(i)\n", encoding="utf-8"
+        )
         (repo / "test_legacy.py").write_text(
             "def test_legacy():\n    assert True\n", encoding="utf-8"
         )
@@ -57,7 +85,16 @@ def _clone_from_local(repo_dir, bare_remote):
         workspace = Path(settings.workspace_root)
         workspace.mkdir(parents=True, exist_ok=True)
         dest = Path(tempfile.mkdtemp(prefix="omnimigrate_", dir=workspace))
-        cmd = ["git", "clone", "--depth", str(depth), "--branch", branch, repo_dir, str(dest)]
+        cmd = [
+            "git",
+            "clone",
+            "--depth",
+            str(depth),
+            "--branch",
+            branch,
+            repo_dir,
+            str(dest),
+        ]
         subprocess.run(cmd, check=True, capture_output=True, text=True)
         _git(dest, "remote", "set-url", "origin", bare_remote)
         return str(dest)
@@ -70,6 +107,15 @@ def local_github(monkeypatch, legacy_repo):
     """Wire the pipeline to a local bare remote instead of real GitHub."""
     repo_dir, remote = legacy_repo
     real_commit = GitHubIntegrationService.commit_and_push
+
+    # The suite runs with SANDBOX_ENABLED=false, so the Docker-backed test
+    # runner would always report failure with empty output.  Run the toy
+    # repository's pytest suite locally instead.
+    monkeypatch.setattr(
+        GitSandboxService,
+        "run_tests",
+        classmethod(lambda cls, path: _run_tests_locally(path)),
+    )
 
     def _commit(
         project_dir,
@@ -105,10 +151,12 @@ def local_github(monkeypatch, legacy_repo):
         _clone_from_local(repo_dir, remote),
     )
     monkeypatch.setattr(
-        "app.services.git_integrations.GitHubIntegrationService.commit_and_push", _commit
+        "app.services.git_integrations.GitHubIntegrationService.commit_and_push",
+        _commit,
     )
     monkeypatch.setattr(
-        "app.services.git_integrations.GitHubIntegrationService.create_pull_request", _fake_pr
+        "app.services.git_integrations.GitHubIntegrationService.create_pull_request",
+        _fake_pr,
     )
     return remote
 
@@ -137,14 +185,19 @@ class TestFullPipeline:
         assert result.changed_files[0].rel_path == "legacy.py"
         assert "range(3)" in result.changed_files[0].after
         assert result.baseline_tests is not None and result.baseline_tests.success
-        assert result.post_refactor_tests is not None and result.post_refactor_tests.success
+        assert (
+            result.post_refactor_tests is not None
+            and result.post_refactor_tests.success
+        )
         assert result.heal_attempts == 0
         assert result.diff_summary
         assert "clone" in [e[1] for e in events]
         assert "pr" in [e[1] for e in events]
         # Branch should exist on the remote.
         out = await asyncio.to_thread(
-            subprocess.check_output, ["git", "ls-remote", "--heads", local_github], text=True
+            subprocess.check_output,
+            ["git", "ls-remote", "--heads", local_github],
+            text=True,
         )
         assert result.branch_name in out
 
@@ -196,18 +249,23 @@ class TestFullPipeline:
         assert result.pull_request_url == "https://github.com/acme/legacy/pull/7"
         assert [c.rel_path for c in result.changed_files] == ["legacy.py"]
 
-    async def test_fails_cleanly_when_nothing_to_migrate(self, monkeypatch, legacy_repo):
+    async def test_fails_cleanly_when_nothing_to_migrate(
+        self, monkeypatch, legacy_repo
+    ):
         """A repo with nothing modernizable must fail cleanly, not crash in git commit."""
         _repo_dir, remote = legacy_repo
         modern_dir = Path(legacy_repo[0]).parent / "modern"
         modern_dir.mkdir(exist_ok=True)
-        (modern_dir / "clean.py").write_text("def f(x):\n    return range(x)\n", encoding="utf-8")
+        (modern_dir / "clean.py").write_text(
+            "def f(x):\n    return range(x)\n", encoding="utf-8"
+        )
 
         def _clone_per_modern(repo_url, branch="main", depth=1, extra_args=None):
             return str(modern_dir)
 
         monkeypatch.setattr(
-            "app.services.git_sandbox.GitSandboxService.clone_repository", _clone_per_modern
+            "app.services.git_sandbox.GitSandboxService.clone_repository",
+            _clone_per_modern,
         )
         orchestrator = AutonomousMigrationOrchestrator()
         with pytest.raises(GitOperationError) as exc_info:
@@ -260,10 +318,14 @@ class TestWorkerEntrypoint:
         )
         await db_session.refresh(job)
         assert job.status == JobStatus.completed.value
-        assert job.metrics["pull_request_url"] == "https://github.com/acme/legacy/pull/7"
+        assert (
+            job.metrics["pull_request_url"] == "https://github.com/acme/legacy/pull/7"
+        )
         assert result["pull_request_url"] == "https://github.com/acme/legacy/pull/7"
 
-    async def test_run_autonomous_job_failure(self, monkeypatch, db_session, legacy_repo):
+    async def test_run_autonomous_job_failure(
+        self, monkeypatch, db_session, legacy_repo
+    ):
         _repo_dir, remote = legacy_repo
 
         def _clone_fails(repo_url, branch="main", depth=1, extra_args=None):
@@ -278,7 +340,10 @@ class TestWorkerEntrypoint:
         db_session.add(project)
         await db_session.flush()
         job = MigrationJob(
-            project_id=project.id, title="autonomous", context_rule=None, input_code="# input"
+            project_id=project.id,
+            title="autonomous",
+            context_rule=None,
+            input_code="# input",
         )
         db_session.add(job)
         await db_session.commit()
@@ -308,7 +373,9 @@ class TestWorkerEntrypoint:
 
 class TestDirectoryWalkers:
     async def test_process_dir_async(self, monkeypatch, tmp_path):
-        (tmp_path / "mod.py").write_text("for i in xrange(3):\n    pass\n", encoding="utf-8")
+        (tmp_path / "mod.py").write_text(
+            "for i in xrange(3):\n    pass\n", encoding="utf-8"
+        )
         (tmp_path / ".venv").mkdir()
         (tmp_path / ".venv" / "skip.py").write_text("x=1\n", encoding="utf-8")
 
@@ -333,10 +400,70 @@ class TestDirectoryWalkers:
         )
         assert changes == []
 
+    async def test_process_dir_async_skips_contract_violation(self, tmp_path):
+        source = "def alpha():\n    return 1\n\ndef beta():\n    return 2\n"
+        (tmp_path / "mod.py").write_text(source, encoding="utf-8")
+
+        async def refactor(code, rule):
+            return "def alpha():\n    return 1\n"
+
+        changes = await AutonomousMigrationOrchestrator._process_dir_async(
+            str(tmp_path), refactor, ""
+        )
+        assert changes == []
+        # The truncated output must not be written to disk.
+        assert (tmp_path / "mod.py").read_text(encoding="utf-8") == source
+
+    async def test_process_dir_async_target_file_raises_contract_error(self, tmp_path):
+        source = "def alpha():\n    return 1\n\ndef beta():\n    return 2\n"
+        (tmp_path / "mod.py").write_text(source, encoding="utf-8")
+
+        async def refactor(code, rule):
+            return "def alpha():\n    return 1\n"
+
+        with pytest.raises(CodeContractError) as exc_info:
+            await AutonomousMigrationOrchestrator._process_dir_async(
+                str(tmp_path), refactor, "", target_files=["mod.py"]
+            )
+        assert "beta" in str(exc_info.value)
+        assert (tmp_path / "mod.py").read_text(encoding="utf-8") == source
+
+    async def test_process_dir_async_repairs_contract_violation(self, tmp_path):
+        source = "def alpha():\n    return 1\n\ndef beta():\n    return 2\n"
+        repaired = (
+            "def alpha():\n    return 1  # modernized\n\ndef beta():\n    return 2\n"
+        )
+        (tmp_path / "mod.py").write_text(source, encoding="utf-8")
+        calls = []
+
+        async def refactor(code, rule):
+            return "def alpha():\n    return 1\n"
+
+        async def repair(code, error, rule):
+            calls.append(error)
+            return repaired
+
+        changes = await AutonomousMigrationOrchestrator._process_dir_async(
+            str(tmp_path),
+            refactor,
+            "",
+            contract_repair_fn=repair,
+        )
+        assert len(changes) == 1
+        assert changes[0].after == repaired
+        assert "beta" in calls[0]
+        assert (tmp_path / "mod.py").read_text(encoding="utf-8") == repaired
+
     async def test_process_dir_async_with_target_files(self, tmp_path):
-        (tmp_path / "a.py").write_text("for i in xrange(1):\n    pass\n", encoding="utf-8")
-        (tmp_path / "b.py").write_text("for i in xrange(2):\n    pass\n", encoding="utf-8")
-        (tmp_path / "c.py").write_text("for i in xrange(3):\n    pass\n", encoding="utf-8")
+        (tmp_path / "a.py").write_text(
+            "for i in xrange(1):\n    pass\n", encoding="utf-8"
+        )
+        (tmp_path / "b.py").write_text(
+            "for i in xrange(2):\n    pass\n", encoding="utf-8"
+        )
+        (tmp_path / "c.py").write_text(
+            "for i in xrange(3):\n    pass\n", encoding="utf-8"
+        )
 
         async def refactor(code, rule):
             return code.replace("xrange", "range")
@@ -348,13 +475,18 @@ class TestDirectoryWalkers:
         assert paths == ["a.py", "c.py"]
 
     async def test_process_dir_async_target_files_ignores_missing(self, tmp_path):
-        (tmp_path / "a.py").write_text("for i in xrange(1):\n    pass\n", encoding="utf-8")
+        (tmp_path / "a.py").write_text(
+            "for i in xrange(1):\n    pass\n", encoding="utf-8"
+        )
 
         async def refactor(code, rule):
             return code.replace("xrange", "range")
 
         changes = await AutonomousMigrationOrchestrator._process_dir_async(
-            str(tmp_path), refactor, "", target_files=["a.py", "does-not-exist.py", "b.txt"]
+            str(tmp_path),
+            refactor,
+            "",
+            target_files=["a.py", "does-not-exist.py", "b.txt"],
         )
         assert [c.rel_path for c in changes] == ["a.py"]
 
@@ -369,7 +501,9 @@ class TestDirectoryWalkers:
         assert missing == ["src/app.py", "docs/README.md", "not.py"]
 
     async def test_heal_dir_async(self, tmp_path):
-        (tmp_path / "mod.py").write_text("for i in xrange(3):\n    pass\n", encoding="utf-8")
+        (tmp_path / "mod.py").write_text(
+            "for i in xrange(3):\n    pass\n", encoding="utf-8"
+        )
         error = f'File "{tmp_path}/mod.py", line 1, in <module>\nNameError: xrange'
 
         async def heal(code, err, rule):
@@ -384,7 +518,9 @@ class TestDirectoryWalkers:
 
 class TestNamingHelpers:
     def test_default_title(self):
-        assert "acme/legacy" in AutonomousMigrationOrchestrator._default_title("acme", "legacy")
+        assert "acme/legacy" in AutonomousMigrationOrchestrator._default_title(
+            "acme", "legacy"
+        )
 
     def test_default_commit_message(self):
         from app.services.git_sandbox import FileChange

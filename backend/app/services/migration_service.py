@@ -13,11 +13,12 @@ from app.core.config import settings
 from app.core.prompts import DEFAULT_CONTEXT_RULE
 from app.models import JobStatus, MigrationJob
 from app.services.ast_parser import analyze_source
+from app.services.code_contract import validate_output
 from app.services.diff_utils import diff_stats, generate_diff
 from app.services.llm_agent import LLMAgent
 from app.services.observability import record_sandbox_result
 from app.services.rule_engine import apply_modernization_rules
-from app.services.sandbox import SandboxFactory, SandboxConfig
+from app.services.sandbox import SandboxConfig
 from app.services.dependencies import DynamicSandbox
 
 logger = structlog.get_logger(__name__)
@@ -42,7 +43,7 @@ class MigrationEngine:
         self.session = session
         self.redis = redis
         self.llm = llm or LLMAgent()
-        
+
         # Use DynamicSandbox with Docker for production security
         sandbox_config = SandboxConfig(
             timeout_seconds=settings.sandbox_timeout_seconds,
@@ -103,14 +104,18 @@ class MigrationEngine:
             return
 
         try:
-            await self._push_state(job, JobStatus.parsing.value, 5, "Parsing source code via AST")
+            await self._push_state(
+                job, JobStatus.parsing.value, 5, "Parsing source code via AST"
+            )
             await self._persist(job)
 
             # 1. AST analysis.
             parse = analyze_source("source.py", job.input_code)
             findings = parse.findings
             if parse.parse_error:
-                logger.warning("AST parse issue for job %s: %s", job_id, parse.parse_error)
+                logger.warning(
+                    "AST parse issue for job %s: %s", job_id, parse.parse_error
+                )
             if parse.python_version_suggestion:
                 findings.append(
                     {
@@ -124,14 +129,19 @@ class MigrationEngine:
 
             job.findings = findings
             await self._push_state(
-                job, JobStatus.analyzing.value, 25, "Analyzing modernization opportunities"
+                job,
+                JobStatus.analyzing.value,
+                25,
+                "Analyzing modernization opportunities",
             )
             await self._persist(job)
 
             # 2. Refactoring: LLM provider, or deterministic local rule engine
             #    as a no-key fallback so the pipeline stays fully functional.
             context_rule = job.context_rule or DEFAULT_CONTEXT_RULE
-            use_local_rules = not settings.openai_api_key and settings.llm_fallback_to_rules
+            use_local_rules = (
+                not settings.openai_api_key and settings.llm_fallback_to_rules
+            )
             provider = "local-rule-engine" if use_local_rules else "llm"
             await self._push_state(
                 job,
@@ -145,8 +155,22 @@ class MigrationEngine:
                 result = apply_modernization_rules(job.input_code)
                 output_code = result.code
             else:
-                output_code = await self.llm.refactor(job.input_code, context_rule, findings)
+                output_code = await self.llm.refactor(
+                    job.input_code, context_rule, findings
+                )
             job.output_code = output_code
+
+            # Enforce the anti-shrinkage contract before and during healing.
+            # compile()/import checks cannot see deleted functions, so this
+            # comparison with the original source is what stops a truncated
+            # "successful" migration.
+            contract_report = validate_output(
+                job.input_code,
+                output_code,
+                min_line_ratio=settings.contract_min_line_ratio,
+                allowed_extra_imports=settings.contract_extra_imports,
+                enabled=settings.contract_enabled,
+            )
             await self._persist(job)
 
             # 3. Sandbox verification with self-healing loop.
@@ -157,7 +181,10 @@ class MigrationEngine:
 
             verification = self.sandbox.verify_with_deps(output_code)
             attempt = 0
-            while not verification.success and attempt < settings.max_self_heal_attempts:
+            contract_repairs = 0
+            while attempt < settings.max_self_heal_attempts and not (
+                verification.success and contract_report.ok
+            ):
                 attempt += 1
                 job.self_heal_attempts = attempt
                 await self._push_state(
@@ -168,16 +195,39 @@ class MigrationEngine:
                 )
                 await self._persist(job)
 
-                error_text = "; ".join(verification.errors[:5])
+                error_parts: list[str] = []
+                if not contract_report.ok:
+                    contract_repairs += 1
+                    error_parts.append(contract_report.to_error_text())
+                if not verification.success:
+                    error_parts.append("; ".join(verification.errors[:5]))
+                error_text = "\n".join(error_parts)
+
                 if use_local_rules:
                     healed = apply_modernization_rules(output_code).code
                 else:
-                    healed = await self.llm.self_heal(output_code, error_text, context_rule)
+                    healed = await self.llm.self_heal(
+                        output_code, error_text, context_rule
+                    )
                 job.output_code = healed
                 output_code = healed
                 await self._persist(job)
 
+                contract_report = validate_output(
+                    job.input_code,
+                    healed,
+                    min_line_ratio=settings.contract_min_line_ratio,
+                    allowed_extra_imports=settings.contract_extra_imports,
+                    enabled=settings.contract_enabled,
+                )
                 verification = self.sandbox.verify_with_deps(healed)
+
+            if not contract_report.ok:
+                record_sandbox_result(success=False)
+                raise RuntimeError(
+                    "Output contract violated after self-healing: "
+                    + "; ".join(v.message for v in contract_report.violations)
+                )
 
             if not verification.success:
                 record_sandbox_result(success=False)
@@ -195,6 +245,10 @@ class MigrationEngine:
                 "duration_seconds": round(elapsed, 3),
                 "findings_count": len(findings),
                 "self_heal_attempts": attempt,
+                "contract_repairs": contract_repairs,
+                "contract_passed": contract_report.ok,
+                "contract_source_symbols": len(contract_report.contract.symbols),
+                "contract_output_symbols": len(contract_report.output_symbols),
                 "provider": provider,
                 "sandbox_stdout": verification.stdout[:2000],
                 **diff_stats(diff).to_dict(),

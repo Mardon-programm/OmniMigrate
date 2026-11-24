@@ -18,13 +18,18 @@ def hash_password(plain_password: str) -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plain-text password against a bcrypt hash."""
     try:
-        return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+        return bcrypt.checkpw(
+            plain_password.encode("utf-8"), hashed_password.encode("utf-8")
+        )
     except ValueError:
         return False
 
 
 def create_token(
-    subject: str, token_type: str, expires_delta: timedelta, extra: dict[str, Any] | None = None
+    subject: str,
+    token_type: str,
+    expires_delta: timedelta,
+    extra: dict[str, Any] | None = None,
 ) -> str:
     """Create a signed JWT token."""
     now = datetime.now(UTC)
@@ -58,7 +63,9 @@ def create_refresh_token(user_id: int) -> str:
 
 def decode_token(token: str, expected_type: str = "access") -> dict[str, Any]:
     """Decode and validate a JWT token. Raises jwt.PyJWTError on failure."""
-    payload = jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
+    payload = jwt.decode(
+        token, settings.secret_key, algorithms=[settings.jwt_algorithm]
+    )
     if payload.get("type") != expected_type:
         raise jwt.InvalidTokenError(f"Expected token type '{expected_type}'")
     return payload

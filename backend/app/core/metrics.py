@@ -85,7 +85,9 @@ def setup_prometheus_middleware(app) -> None:
             path = request.url.path
             with REQUEST_LATENCY.labels(method=method, endpoint=path).time():
                 response = await call_next(request)
-            REQUEST_COUNT.labels(method=method, endpoint=path, status=response.status_code).inc()
+            REQUEST_COUNT.labels(
+                method=method, endpoint=path, status=response.status_code
+            ).inc()
             return response
 
     app.add_middleware(PrometheusMiddleware)

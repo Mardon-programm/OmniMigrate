@@ -12,6 +12,7 @@ import structlog
 from app.core.config import settings
 from app.core.prompts import DEFAULT_CONTEXT_RULE
 from app.models import JobStatus
+from app.services.code_contract import CodeContractError, validate_output
 from app.services.git_integrations import GitHubIntegrationService
 from app.services.git_sandbox import (
     FileChange,
@@ -116,10 +117,24 @@ class AutonomousMigrationOrchestrator:
 
             async def llm_refactor(code: str, rule: str) -> str:
                 try:
-                    return await self.llm.refactor(code, rule, [])
+                    if hasattr(self.llm, "refactor_enforced"):
+                        migrated, report, repairs = await self.llm.refactor_enforced(
+                            code, rule, [], language="python"
+                        )
+                    else:  # custom provider without the contract helper
+                        return await self.llm.refactor(code, rule, [])
                 except Exception:
-                    logger.warning("LLM unavailable, degrading to local rules", exc_info=True)
+                    logger.warning(
+                        "LLM unavailable, degrading to local rules", exc_info=True
+                    )
                     return apply_modernization_rules(code).code
+                if not report.ok:
+                    raise CodeContractError(report)
+                if repairs:
+                    logger.info(
+                        "Contract repairs applied during refactor", repairs=repairs
+                    )
+                return migrated
 
             return llm_refactor
 
@@ -135,7 +150,9 @@ class AutonomousMigrationOrchestrator:
                 try:
                     return await self.llm.self_heal(code, error, rule)
                 except Exception:
-                    logger.warning("LLM heal unavailable, degrading to local rules", exc_info=True)
+                    logger.warning(
+                        "LLM heal unavailable, degrading to local rules", exc_info=True
+                    )
                     return apply_modernization_rules(code).code
 
             return llm_heal
@@ -212,8 +229,13 @@ class AutonomousMigrationOrchestrator:
             # 3. Refactor the whole tree (or the requested target files only).
             await self._report(40, "refactor", "Refactoring Python sources")
             refactor_fn = self._make_refactor_fn(rule)
+            heal_fn = self._make_heal_fn(rule)
             changed_files = await self._process_dir_async(
-                project_dir, refactor_fn, rule, target_files=target_files
+                project_dir,
+                refactor_fn,
+                rule,
+                target_files=target_files,
+                contract_repair_fn=heal_fn,
             )
             log(f"Refactored {len(changed_files)} file(s)")
 
@@ -229,8 +251,9 @@ class AutonomousMigrationOrchestrator:
 
             # 4. Post-refactor tests with self-healing.
             await self._report(60, "verify", "Re-running tests after refactor")
-            post_tests = await asyncio.to_thread(GitSandboxService.run_tests, project_dir)
-            heal_fn = self._make_heal_fn(rule)
+            post_tests = await asyncio.to_thread(
+                GitSandboxService.run_tests, project_dir
+            )
 
             while not post_tests.success and heal_attempts < self.max_heal_attempts:
                 heal_attempts += 1
@@ -240,10 +263,14 @@ class AutonomousMigrationOrchestrator:
                     f"Self-healing attempt {heal_attempts}/{self.max_heal_attempts}",
                 )
                 error_output = f"{post_tests.stdout}\n{post_tests.stderr}"
-                healed = await self._heal_dir_async(project_dir, error_output, heal_fn, rule)
+                healed = await self._heal_dir_async(
+                    project_dir, error_output, heal_fn, rule
+                )
                 changed_files.extend(healed)
                 log(f"Heal attempt {heal_attempts}: fixed {len(healed)} file(s)")
-                post_tests = await asyncio.to_thread(GitSandboxService.run_tests, project_dir)
+                post_tests = await asyncio.to_thread(
+                    GitSandboxService.run_tests, project_dir
+                )
 
             if not post_tests.success:
                 raise GitOperationError(
@@ -273,7 +300,12 @@ class AutonomousMigrationOrchestrator:
             )
             github = GitHubIntegrationService(github_token)
             pr = await github.create_pull_request(
-                repo_owner, repo_name, title, head=branch, base=effective_base, body=body
+                repo_owner,
+                repo_name,
+                title,
+                head=branch,
+                base=effective_base,
+                body=body,
             )
             pr_url = pr["html_url"]
             pr_number = pr["number"]
@@ -314,6 +346,7 @@ class AutonomousMigrationOrchestrator:
         refactor_fn,
         context_rule: str,
         target_files: list[str] | None = None,
+        contract_repair_fn=None,
     ) -> list[FileChange]:
         root = Path(project_dir)
         changes: list[FileChange] = []
@@ -326,7 +359,9 @@ class AutonomousMigrationOrchestrator:
                 if p.is_file() and p.suffix == ".py":
                     candidates.append(p)
             # Preserve a deterministic, sorted walk over just the requested files.
-            paths = sorted(set(candidates), key=lambda p: p.relative_to(root).as_posix())
+            paths = sorted(
+                set(candidates), key=lambda p: p.relative_to(root).as_posix()
+            )
         else:
             paths = await asyncio.to_thread(lambda: sorted(root.rglob("*.py")))
 
@@ -340,11 +375,64 @@ class AutonomousMigrationOrchestrator:
                 continue
             try:
                 after = await refactor_fn(before, context_rule)
+            except CodeContractError as exc:
+                # An explicitly requested file must not be silently skipped.
+                if target_files:
+                    raise
+                logger.warning(
+                    "Skipping %s: LLM output violated the migration contract",
+                    rel,
+                    violations=[v.code for v in exc.report.violations],
+                )
+                continue
             except Exception:
                 continue
-            if after and after != before:
-                await asyncio.to_thread(path.write_text, after, encoding="utf-8")
-                changes.append(FileChange(rel_path=rel, before=before, after=after))
+            if not after or after == before:
+                continue
+
+            report = validate_output(
+                before,
+                after,
+                min_line_ratio=settings.contract_min_line_ratio,
+                allowed_extra_imports=settings.contract_extra_imports,
+                enabled=settings.contract_enabled,
+            )
+            repairs = 0
+            while (
+                not report.ok
+                and contract_repair_fn is not None
+                and repairs < settings.max_self_heal_attempts
+            ):
+                repairs += 1
+                repaired = await contract_repair_fn(
+                    after, report.to_error_text(), context_rule
+                )
+                if not repaired or repaired == after:
+                    break
+                after = repaired
+                report = validate_output(
+                    before,
+                    after,
+                    min_line_ratio=settings.contract_min_line_ratio,
+                    allowed_extra_imports=settings.contract_extra_imports,
+                    enabled=settings.contract_enabled,
+                )
+            if after == before:
+                # The model repaired the output back to the original source;
+                # there is nothing to commit for this file.
+                continue
+            if not report.ok:
+                if target_files:
+                    raise CodeContractError(report)
+                logger.warning(
+                    "Skipping %s: migrated output failed the contract checks",
+                    rel,
+                    violations=[v.code for v in report.violations],
+                )
+                continue
+
+            await asyncio.to_thread(path.write_text, after, encoding="utf-8")
+            changes.append(FileChange(rel_path=rel, before=before, after=after))
         return changes
 
     @staticmethod
@@ -366,9 +454,24 @@ class AutonomousMigrationOrchestrator:
                 healed = await heal_fn(broken, error_output, context_rule)
             except Exception:
                 continue
-            if healed and healed != broken:
-                await asyncio.to_thread(path.write_text, healed, encoding="utf-8")
-                changes.append(FileChange(rel_path=rel, before=broken, after=healed))
+            if not healed or healed == broken:
+                continue
+            report = validate_output(
+                broken,
+                healed,
+                min_line_ratio=settings.contract_min_line_ratio,
+                allowed_extra_imports=settings.contract_extra_imports,
+                enabled=settings.contract_enabled,
+            )
+            if not report.ok:
+                logger.warning(
+                    "Skipping self-heal for %s: output failed the contract checks",
+                    rel,
+                    violations=[v.code for v in report.violations],
+                )
+                continue
+            await asyncio.to_thread(path.write_text, healed, encoding="utf-8")
+            changes.append(FileChange(rel_path=rel, before=broken, after=healed))
         return changes
 
     # --- Naming helpers ----------------------------------------------------
@@ -384,7 +487,9 @@ class AutonomousMigrationOrchestrator:
 
     @staticmethod
     def _default_commit_message(changed_files: list[FileChange]) -> str:
-        return f"refactor: apply Python 3.12+ modernization ({len(changed_files)} files)"
+        return (
+            f"refactor: apply Python 3.12+ modernization ({len(changed_files)} files)"
+        )
 
     @staticmethod
     def _default_body(changed_files: list[FileChange]) -> str:
@@ -409,7 +514,9 @@ class AutonomousMigrationOrchestrator:
         for change in changed_files[:100]:
             diff = generate_diff(change.before, change.after, change.rel_path)
             stats = diff_stats(diff)
-            lines.append(f"### {change.rel_path} (+{stats.additions}/-{stats.deletions})\n")
+            lines.append(
+                f"### {change.rel_path} (+{stats.additions}/-{stats.deletions})\n"
+            )
             if change.applied_rules:
                 lines.append("Rules: " + ", ".join(change.applied_rules) + "\n")
         return "\n".join(lines)
@@ -512,7 +619,9 @@ async def run_autonomous_migration_job(
             with contextlib.suppress(Exception):  # Redis must never break cleanup.
                 await redis.set(
                     STATE_KEY.format(job_id=job.id),
-                    MigrationEngine._encode_state(JobStatus.failed.value, 100, str(exc)[:4000]),
+                    MigrationEngine._encode_state(
+                        JobStatus.failed.value, 100, str(exc)[:4000]
+                    ),
                     ex=3600 * 24 * 7,
                 )
             raise

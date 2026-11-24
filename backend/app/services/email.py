@@ -12,9 +12,13 @@ class EmailService:
     """Simple SMTP email service for transactional emails."""
 
     def __init__(self):
-        self.enabled = bool(settings.smtp_host and settings.smtp_user and settings.smtp_password)
+        self.enabled = bool(
+            settings.smtp_host and settings.smtp_user and settings.smtp_password
+        )
 
-    def _send(self, to: str, subject: str, html: str, text: Optional[str] = None) -> bool:
+    def _send(
+        self, to: str, subject: str, html: str, text: Optional[str] = None
+    ) -> bool:
         if not self.enabled:
             return False
 

@@ -56,7 +56,9 @@ async def create_project(
 
 
 @router.get("/{project_id}", response_model=ProjectRead)
-async def get_project(project_id: int, session: DbSession, user: CurrentUser) -> ProjectRead:
+async def get_project(
+    project_id: int, session: DbSession, user: CurrentUser
+) -> ProjectRead:
     project = await _get_owned_project(session, project_id, user)
     repo = ProjectRepository(session)
     item = ProjectRead.model_validate(project)
@@ -80,7 +82,9 @@ async def update_project(
     return item
 
 
-@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@router.delete(
+    "/{project_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None
+)
 async def delete_project(
     project_id: int,
     session: DbSession,

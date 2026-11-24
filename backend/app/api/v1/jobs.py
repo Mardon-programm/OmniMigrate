@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from redis.asyncio import Redis
 
 from app.core.database import get_redis
+from app.core.upstash_redis import UpstashRedis
 from app.core.deps import CurrentUser, DbSession
 from app.core.prompts import DEFAULT_CONTEXT_RULE
 from app.models import JobStatus, MigrationJob, User, UserRole
@@ -30,7 +31,7 @@ async def _get_job(session, job_id: int, user: User) -> MigrationJob:
     return job
 
 
-async def _live_state(redis: Redis, job_id: int) -> dict | None:
+async def _live_state(redis: Redis | UpstashRedis, job_id: int) -> dict | None:
     raw = await redis.get(STATE_KEY.format(job_id=job_id))
     if not raw:
         return None
@@ -86,7 +87,9 @@ async def list_jobs(
     repo = JobRepository(session)
     if project_id is not None:
         project = await ProjectRepository(session).get_by_id(project_id)
-        if project is None or (project.owner_id != user.id and user.role != UserRole.admin):
+        if project is None or (
+            project.owner_id != user.id and user.role != UserRole.admin
+        ):
             raise HTTPException(status_code=403, detail="Access denied.")
         jobs = await repo.list_for_project(project_id, offset=offset, limit=limit)
     elif user.role == UserRole.admin:
@@ -123,7 +126,9 @@ async def get_job(job_id: int, session: DbSession, user: CurrentUser) -> JobRead
 
 
 @router.get("/{job_id}/status", response_model=JobStatusRead)
-async def get_job_status(job_id: int, session: DbSession, user: CurrentUser) -> JobStatusRead:
+async def get_job_status(
+    job_id: int, session: DbSession, user: CurrentUser
+) -> JobStatusRead:
     """Return real-time job status, preferring the live Redis state."""
     job = await _get_job(session, job_id, user)
     redis = await get_redis()

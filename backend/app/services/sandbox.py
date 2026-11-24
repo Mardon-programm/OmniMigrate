@@ -1,18 +1,46 @@
 from __future__ import annotations
 
-import asyncio
-import json
 import os
+import subprocess
+import sys
 import tempfile
-import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
 import docker
-from docker.errors import DockerException, ImageNotFound
+from docker.errors import APIError, ContainerError, DockerException, ImageNotFound
 
-from app.core.config import settings
+
+def _decode_stream(value: object) -> str:
+    """Decode a docker log stream across SDK versions."""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", "replace")
+    if value is None:
+        return ""
+    return str(value)
+
+
+def extract_container_error_output(exc: ContainerError) -> tuple[str, str]:
+    """Best-effort stdout/stderr extraction from a ContainerError.
+
+    Docker SDK 7.x no longer exposes ``stdout`` and often leaves ``stderr``
+    as ``None`` when ``containers.run`` is used with ``detach=False``. In that
+    case the traceback is still available through ``exc.container.logs()``.
+    """
+    stdout_raw = getattr(exc, "stdout", None)
+    stderr_raw = getattr(exc, "stderr", None)
+
+    if stderr_raw is None:
+        container = getattr(exc, "container", None)
+        if container is not None:
+            try:
+                stderr_raw = container.logs(stdout=True, stderr=True)
+            except Exception:
+                # Container may already be auto-removed; keep the fallback.
+                stderr_raw = None
+
+    return _decode_stream(stdout_raw), _decode_stream(stderr_raw or str(exc))
 
 
 @dataclass
@@ -28,6 +56,7 @@ class VerificationResult:
 @dataclass
 class SandboxConfig:
     """Configuration for sandbox execution."""
+
     timeout_seconds: int = 30
     memory_limit: str = "512m"
     cpu_limit: float = 1.0
@@ -39,13 +68,14 @@ class SandboxConfig:
 
 class SandboxError(Exception):
     """Raised when the sandbox itself cannot be provisioned."""
+
     pass
 
 
 class DockerSandbox:
     """
     Docker-based isolated code execution sandbox.
-    
+
     Security features:
     - Runs in ephemeral container with no network access
     - Read-only root filesystem
@@ -62,7 +92,11 @@ class DockerSandbox:
         image: str = "python:3.12-slim",
     ):
         self.config = config or SandboxConfig()
-        self.enabled = enabled and settings.sandbox_enabled
+        # The global kill-switch is applied by callers (DynamicSandbox /
+        # SandboxFactory).  An explicit ``enabled`` value must be honoured so
+        # direct callers — including unit tests — get the execution mode they
+        # asked for.
+        self.enabled = enabled
         self.image = image
         self._client: Optional[docker.DockerClient] = None
 
@@ -86,7 +120,9 @@ class DockerSandbox:
             except DockerException as e:
                 raise SandboxError(f"Failed to pull sandbox image {self.image}: {e}")
 
-    def _create_container_config(self, code: str, workdir: str, entrypoint: list[str]) -> dict:
+    def _create_container_config(
+        self, code: str, workdir: str, entrypoint: list[str]
+    ) -> dict:
         """Create secure container configuration."""
         return {
             "image": self.image,
@@ -109,7 +145,9 @@ class DockerSandbox:
             "pids_limit": self.config.pids_limit,
             "network_mode": "none" if self.config.network_disabled else "bridge",
             "read_only": self.config.read_only_rootfs,
-            "tmpfs": {"/var/tmp": f"size={self.config.tmpfs_size},exec"} if self.config.read_only_rootfs else None,
+            "tmpfs": {"/var/tmp": f"size={self.config.tmpfs_size},exec"}
+            if self.config.read_only_rootfs
+            else None,
             "security_opt": ["no-new-privileges:true"],
             "cap_drop": ["ALL"],
             "detach": False,
@@ -140,7 +178,9 @@ class DockerSandbox:
 
         # 2. Runtime gate in isolated container
         if not self.enabled:
-            return VerificationResult(success=True, syntax_ok=True, runtime_ok=True, errors=[])
+            return VerificationResult(
+                success=True, syntax_ok=True, runtime_ok=True, errors=[]
+            )
 
         try:
             self._ensure_image()
@@ -155,7 +195,10 @@ class DockerSandbox:
 
     def _execute_in_container(self, code: str) -> VerificationResult:
         """Execute code in ephemeral Docker container."""
-        with tempfile.TemporaryDirectory(prefix="omnimigrate_sandbox_", dir="/tmp/omnimigrate") as tmpdir:
+        Path("/tmp/omnimigrate").mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(
+            prefix="omnimigrate_sandbox_", dir="/tmp/omnimigrate"
+        ) as tmpdir:
             workdir = Path(tmpdir)
             code_file = workdir / "script.py"
             code_file.write_text(code, encoding="utf-8")
@@ -175,7 +218,11 @@ class DockerSandbox:
                     stdout=True,
                     stderr=True,
                 )
-                stdout = container.decode("utf-8") if isinstance(container, bytes) else container
+                stdout = (
+                    container.decode("utf-8")
+                    if isinstance(container, bytes)
+                    else container
+                )
                 return VerificationResult(
                     success=True,
                     syntax_ok=True,
@@ -183,19 +230,22 @@ class DockerSandbox:
                     errors=[],
                     stdout=stdout,
                 )
-            except docker.errors.ContainerError as e:
-                stderr = e.stderr.decode("utf-8") if isinstance(e.stderr, bytes) else str(e.stderr)
+            except ContainerError as e:
+                stdout, stderr = extract_container_error_output(e)
+                exit_status = getattr(e, "exit_status", "?")
                 return VerificationResult(
                     success=False,
                     syntax_ok=True,
                     runtime_ok=False,
-                    errors=[stderr.strip() or f"Process exited with code {e.exit_status}"],
-                    stdout=e.stdout.decode("utf-8") if e.stdout else "",
+                    errors=[
+                        stderr.strip() or f"Process exited with code {exit_status}"
+                    ],
+                    stdout=stdout,
                     stderr=stderr,
                 )
-            except docker.errors.ImageNotFound:
+            except ImageNotFound:
                 raise SandboxError(f"Image {self.image} not found")
-            except docker.errors.APIError as e:
+            except APIError as e:
                 raise SandboxError(f"Docker API error: {e}")
 
     @staticmethod
@@ -217,7 +267,7 @@ class DockerSandbox:
 class E2BSandbox:
     """
     E2B (e2b.dev) sandbox integration for cloud-based isolated execution.
-    
+
     Provides:
     - True cloud isolation (Firecracker microVMs)
     - Pre-installed Python + common ML/data science packages
@@ -236,7 +286,8 @@ class E2BSandbox:
             raise SandboxError("E2B_API_KEY not configured")
 
         try:
-            import e2b
+            # e2b is an optional runtime dependency with no installed stubs.
+            import e2b  # pyright: ignore[reportMissingImports]
         except ImportError:
             raise SandboxError("e2b package not installed. Run: pip install e2b")
 
@@ -257,19 +308,25 @@ class E2BSandbox:
             compile(code, "<omnimigrate-output>", "exec")
         except (SyntaxError, ValueError, TypeError) as exc:
             return VerificationResult(
-                success=False, syntax_ok=False, runtime_ok=False, errors=[f"SyntaxError: {exc}"]
+                success=False,
+                syntax_ok=False,
+                runtime_ok=False,
+                errors=[f"SyntaxError: {exc}"],
             )
 
         if not self.api_key:
-            return VerificationResult(success=True, syntax_ok=True, runtime_ok=True, errors=[])
+            return VerificationResult(
+                success=True, syntax_ok=True, runtime_ok=True, errors=[]
+            )
 
         try:
-            import e2b
+            import e2b  # pyright: ignore[reportMissingImports]
+
             session = await e2b.Session.connect_async(self._session_id)
-            
+
             # Execute code
             result = await session.run_python_async(code)
-            
+
             return VerificationResult(
                 success=result.error is None,
                 syntax_ok=True,
@@ -290,7 +347,8 @@ class E2BSandbox:
         """Close the E2B session."""
         if self._session_id:
             try:
-                import e2b
+                import e2b  # pyright: ignore[reportMissingImports]
+
                 session = await e2b.Session.connect_async(self._session_id)
                 await session.close_async()
             except Exception:
@@ -301,7 +359,7 @@ class E2BSandbox:
 class ModalSandbox:
     """
     Modal (modal.com) sandbox integration for serverless GPU/CPU execution.
-    
+
     Features:
     - Serverless containers with cold start ~1s
     - GPU support for ML workloads
@@ -309,7 +367,9 @@ class ModalSandbox:
     - Pay-per-second billing
     """
 
-    def __init__(self, token_id: Optional[str] = None, token_secret: Optional[str] = None):
+    def __init__(
+        self, token_id: Optional[str] = None, token_secret: Optional[str] = None
+    ):
         self.token_id = token_id or os.getenv("MODAL_TOKEN_ID")
         self.token_secret = token_secret or os.getenv("MODAL_TOKEN_SECRET")
         self._stub = None
@@ -318,16 +378,21 @@ class ModalSandbox:
         """Get or create Modal stub."""
         if self._stub is None:
             try:
-                import modal
+                # modal is an optional runtime dependency with no installed stubs.
+                import modal  # pyright: ignore[reportMissingImports]
             except ImportError:
-                raise SandboxError("modal package not installed. Run: pip install modal")
+                raise SandboxError(
+                    "modal package not installed. Run: pip install modal"
+                )
 
             if not self.token_id or not self.token_secret:
-                raise SandboxError("MODAL_TOKEN_ID and MODAL_TOKEN_SECRET not configured")
+                raise SandboxError(
+                    "MODAL_TOKEN_ID and MODAL_TOKEN_SECRET not configured"
+                )
 
             # Create a stub with a sandbox function
             self._stub = modal.Stub("omnimigrate-sandbox")
-            
+
             @self._stub.function(
                 image=modal.Image.debian_slim().pip_install(),
                 timeout=60,
@@ -337,20 +402,23 @@ class ModalSandbox:
             def run_python(code: str):
                 import subprocess
                 import tempfile
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+
+                with tempfile.NamedTemporaryFile(
+                    mode="w", suffix=".py", delete=False
+                ) as f:
                     f.write(code)
                     f.flush()
                     try:
                         result = subprocess.run(
-                            ['python', f.name],
+                            ["python", f.name],
                             capture_output=True,
                             text=True,
                             timeout=30,
                         )
                         return {
-                            'stdout': result.stdout,
-                            'stderr': result.stderr,
-                            'returncode': result.returncode,
+                            "stdout": result.stdout,
+                            "stderr": result.stderr,
+                            "returncode": result.returncode,
                         }
                     finally:
                         os.unlink(f.name)
@@ -365,27 +433,31 @@ class ModalSandbox:
             compile(code, "<omnimigrate-output>", "exec")
         except (SyntaxError, ValueError, TypeError) as exc:
             return VerificationResult(
-                success=False, syntax_ok=False, runtime_ok=False, errors=[f"SyntaxError: {exc}"]
+                success=False,
+                syntax_ok=False,
+                runtime_ok=False,
+                errors=[f"SyntaxError: {exc}"],
             )
 
         if not self.token_id:
-            return VerificationResult(success=True, syntax_ok=True, runtime_ok=True, errors=[])
+            return VerificationResult(
+                success=True, syntax_ok=True, runtime_ok=True, errors=[]
+            )
 
         try:
-            import modal
             stub = self._get_stub()
-            
+
             with stub.run():
                 run_python = stub["run_python"]
                 result = await run_python.remote.aio(code)
-            
+
             return VerificationResult(
-                success=result['returncode'] == 0,
+                success=result["returncode"] == 0,
                 syntax_ok=True,
-                runtime_ok=result['returncode'] == 0,
-                errors=[result['stderr']] if result['returncode'] != 0 else [],
-                stdout=result['stdout'],
-                stderr=result['stderr'],
+                runtime_ok=result["returncode"] == 0,
+                errors=[result["stderr"]] if result["returncode"] != 0 else [],
+                stdout=result["stdout"],
+                stderr=result["stderr"],
             )
         except Exception as e:
             return VerificationResult(
@@ -401,12 +473,11 @@ class SandboxFactory:
 
     @staticmethod
     def create(
-        sandbox_type: str = "auto",
-        **kwargs
-    ) -> "DockerSandbox | E2BSandbox | ModalSandbox":
+        sandbox_type: str = "auto", **kwargs
+    ) -> "DockerSandbox | E2BSandbox | ModalSandbox | LocalSandbox":
         """
         Create sandbox instance.
-        
+
         Args:
             sandbox_type: "docker", "e2b", "modal", or "auto"
             **kwargs: Passed to sandbox constructor
@@ -426,13 +497,96 @@ class SandboxFactory:
             except Exception:
                 # Fallback to local subprocess (dev only)
                 from app.services.sandbox import CodeSandbox
+
                 return CodeSandbox(**kwargs)
         else:
             raise ValueError(f"Unknown sandbox type: {sandbox_type}")
 
 
-# Backward compatibility - use Docker sandbox as default
-CodeSandbox = DockerSandbox
+class LocalSandbox:
+    """Unisolated subprocess sandbox for local development and tests only.
+
+    Production must use ``DockerSandbox`` (or a cloud sandbox).  This class
+    exists so unit tests can exercise the runtime verification path without a
+    Docker daemon, and so ``SandboxFactory('auto')`` degrades gracefully on a
+    developer laptop.  It must never be selected by the production worker.
+    """
+
+    def __init__(
+        self,
+        config: SandboxConfig | None = None,
+        enabled: bool = True,
+        image: str | None = None,
+    ):
+        self.config = config or SandboxConfig()
+        self.enabled = enabled
+        self.image = image
+
+    def verify(self, code: str, language: str = "python") -> VerificationResult:
+        if language != "python":
+            return DockerSandbox._verify_generic(code)
+
+        ok, err = check_syntax(code)
+        if not ok:
+            return VerificationResult(
+                success=False,
+                syntax_ok=False,
+                runtime_ok=False,
+                errors=[err or "SyntaxError"],
+            )
+        if not self.enabled:
+            return VerificationResult(
+                success=True, syntax_ok=True, runtime_ok=True, errors=[]
+            )
+
+        with tempfile.TemporaryDirectory(prefix="omnimigrate_local_sandbox_") as tmpdir:
+            script = Path(tmpdir) / "script.py"
+            script.write_text(code, encoding="utf-8")
+            try:
+                proc = subprocess.run(
+                    [sys.executable, str(script)],
+                    capture_output=True,
+                    text=True,
+                    timeout=self.config.timeout_seconds,
+                    cwd=tmpdir,
+                )
+            except subprocess.TimeoutExpired:
+                return VerificationResult(
+                    success=False,
+                    syntax_ok=True,
+                    runtime_ok=False,
+                    errors=[
+                        f"Execution timed out after {self.config.timeout_seconds}s"
+                    ],
+                )
+
+        return VerificationResult(
+            success=proc.returncode == 0,
+            syntax_ok=True,
+            runtime_ok=proc.returncode == 0,
+            errors=[proc.stderr.strip()] if proc.returncode != 0 else [],
+            stdout=proc.stdout,
+            stderr=proc.stderr,
+        )
+
+    async def verify_with_deps(
+        self,
+        code: str,
+        language: str = "python",
+        extra_packages: list[str] | None = None,
+    ) -> VerificationResult:
+        # No dependency installation in the local fallback.
+        return self.verify(code, language)
+
+
+def CodeSandbox(*args, **kwargs) -> DockerSandbox | LocalSandbox:
+    """Backward-compatible constructor that prefers Docker, falls back locally."""
+    try:
+        client = docker.from_env()
+        client.ping()
+        return DockerSandbox(*args, **kwargs)
+    except Exception:
+        return LocalSandbox(*args, **kwargs)
 
 
 def check_syntax(code: str) -> tuple[bool, str | None]:

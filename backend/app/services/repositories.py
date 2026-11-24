@@ -18,8 +18,12 @@ class UserRepository:
         result = await self.session.execute(select(User).where(User.email == email))
         return result.scalar_one_or_none()
 
-    async def create(self, email: str, hashed_password: str, full_name: str, role) -> User:
-        user = User(email=email, hashed_password=hashed_password, full_name=full_name, role=role)
+    async def create(
+        self, email: str, hashed_password: str, full_name: str, role
+    ) -> User:
+        user = User(
+            email=email, hashed_password=hashed_password, full_name=full_name, role=role
+        )
         self.session.add(user)
         await self.session.flush()
         return user
@@ -42,9 +46,13 @@ class ProjectRepository:
     async def get_by_id(self, project_id: int) -> Project | None:
         return await self.session.get(Project, project_id)
 
-    async def get_by_owner_and_repo_url(self, owner_id: int, repo_url: str) -> Project | None:
+    async def get_by_owner_and_repo_url(
+        self, owner_id: int, repo_url: str
+    ) -> Project | None:
         result = await self.session.execute(
-            select(Project).where(Project.owner_id == owner_id, Project.repo_url == repo_url)
+            select(Project).where(
+                Project.owner_id == owner_id, Project.repo_url == repo_url
+            )
         )
         return result.scalars().first()
 
@@ -62,13 +70,18 @@ class ProjectRepository:
 
     async def list_all(self, offset: int = 0, limit: int = 100) -> list[Project]:
         result = await self.session.execute(
-            select(Project).order_by(Project.created_at.desc()).offset(offset).limit(limit)
+            select(Project)
+            .order_by(Project.created_at.desc())
+            .offset(offset)
+            .limit(limit)
         )
         return list(result.scalars().all())
 
     async def count_jobs(self, project_id: int) -> int:
         result = await self.session.execute(
-            select(sa.func.count(MigrationJob.id)).where(MigrationJob.project_id == project_id)
+            select(sa.func.count(MigrationJob.id)).where(
+                MigrationJob.project_id == project_id
+            )
         )
         return int(result.scalar_one())
 

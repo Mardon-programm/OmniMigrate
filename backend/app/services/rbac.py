@@ -8,7 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.organization import OrganizationMember, OrgRole
 
 
-async def get_org_role(db: AsyncSession, user_id: int, organization_id: int) -> OrgRole | None:
+async def get_org_role(
+    db: AsyncSession, user_id: int, organization_id: int
+) -> OrgRole | None:
     stmt = select(OrganizationMember).where(
         OrganizationMember.user_id == user_id,
         OrganizationMember.organization_id == organization_id,

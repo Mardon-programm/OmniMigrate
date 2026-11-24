@@ -16,7 +16,9 @@ os.environ["OPENAI_BASE_URL"] = ""
 os.environ["LLM_FALLBACK_TO_RULES"] = "true"
 os.environ["WORKSPACE_ROOT"] = str(Path(tempfile.gettempdir()) / "omnimigrate_test_ws")
 os.environ["SANDBOX_ENABLED"] = "false"
-os.environ["PATH"] = str(Path(sys.executable).parent) + os.pathsep + os.environ.get("PATH", "")
+os.environ["PATH"] = (
+    str(Path(sys.executable).parent) + os.pathsep + os.environ.get("PATH", "")
+)
 
 import httpx  # noqa: E402
 import pytest  # noqa: E402
@@ -151,7 +153,9 @@ _jobs_mod.enqueue_migration_job = _noop_enqueue_migration
 _auto_mod.enqueue_autonomous_migration = _noop_enqueue_autonomous
 
 # Verify the patch took effect on route modules.
-assert _auto_mod.enqueue_autonomous_migration is _noop_enqueue_autonomous, "auto patch failed"
+assert (
+    _auto_mod.enqueue_autonomous_migration is _noop_enqueue_autonomous
+), "auto patch failed"
 assert _jobs_mod.enqueue_migration_job is _noop_enqueue_migration, "jobs patch failed"
 
 

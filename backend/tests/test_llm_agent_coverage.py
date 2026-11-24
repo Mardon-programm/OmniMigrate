@@ -175,7 +175,9 @@ class TestRefactor:
         mock_complete = AsyncMock(return_value="```python\ndef f():\n    return 1\n```")
         monkeypatch.setattr(agent, "_complete", mock_complete)
 
-        result = await agent.refactor("old code", "modernize", [{"line": 1, "message": "x"}])
+        result = await agent.refactor(
+            "old code", "modernize", [{"line": 1, "message": "x"}]
+        )
         assert result == "def f():\n    return 1\n"
         mock_complete.assert_called_once()
 

@@ -168,7 +168,9 @@ class TestResetPassword:
         from app.models.user import User as UserModel
         from sqlalchemy import select
 
-        result = await db_session.execute(select(UserModel).where(UserModel.id == user_id))
+        result = await db_session.execute(
+            select(UserModel).where(UserModel.id == user_id)
+        )
         user = result.scalar_one()
 
         raw_token = await self._create_reset_token(db_session, user.id)
@@ -338,7 +340,9 @@ class TestProductionValidation:
         ):
             mock_settings.environment = "production"
             mock_settings.secret_key = "change-me-in-production"
-            mock_settings.database_url = "postgresql+asyncpg://omnimigrate:omnimigrate@localhost/db"
+            mock_settings.database_url = (
+                "postgresql+asyncpg://omnimigrate:omnimigrate@localhost/db"
+            )
             mock_settings.bcrypt_rounds = 12
             main_mod._validate_production_secrets()
 
@@ -351,7 +355,9 @@ class TestProductionValidation:
         ):
             mock_settings.environment = "production"
             mock_settings.secret_key = "short"
-            mock_settings.database_url = "postgresql+asyncpg://user:strongpass@localhost/db"
+            mock_settings.database_url = (
+                "postgresql+asyncpg://user:strongpass@localhost/db"
+            )
             mock_settings.bcrypt_rounds = 12
             main_mod._validate_production_secrets()
 
@@ -364,7 +370,9 @@ class TestProductionValidation:
         ):
             mock_settings.environment = "production"
             mock_settings.secret_key = "a" * 32
-            mock_settings.database_url = "postgresql+asyncpg://omnimigrate:omnimigrate@localhost/db"
+            mock_settings.database_url = (
+                "postgresql+asyncpg://omnimigrate:omnimigrate@localhost/db"
+            )
             mock_settings.bcrypt_rounds = 12
             main_mod._validate_production_secrets()
 
@@ -377,7 +385,9 @@ class TestProductionValidation:
         ):
             mock_settings.environment = "production"
             mock_settings.secret_key = "a" * 32
-            mock_settings.database_url = "postgresql+asyncpg://user:strongpass@localhost/db"
+            mock_settings.database_url = (
+                "postgresql+asyncpg://user:strongpass@localhost/db"
+            )
             mock_settings.bcrypt_rounds = 8
             main_mod._validate_production_secrets()
 

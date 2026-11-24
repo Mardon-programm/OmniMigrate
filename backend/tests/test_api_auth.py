@@ -91,7 +91,9 @@ class TestRefresh:
         assert resp.status_code == 401
 
     async def test_refresh_garbage_token(self, client):
-        resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": "not-a-jwt"})
+        resp = await client.post(
+            "/api/v1/auth/refresh", json={"refresh_token": "not-a-jwt"}
+        )
         assert resp.status_code == 401
 
 
@@ -108,7 +110,9 @@ class TestMe:
         assert resp.status_code == 401
 
     async def test_me_rejects_bad_token(self, client):
-        resp = await client.get("/api/v1/auth/me", headers={"Authorization": "Bearer garbage"})
+        resp = await client.get(
+            "/api/v1/auth/me", headers={"Authorization": "Bearer garbage"}
+        )
         assert resp.status_code == 401
 
     async def test_refresh_deactivated_user(self, client, db_session):

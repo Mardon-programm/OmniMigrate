@@ -13,6 +13,12 @@ from tenacity import (
 
 from app.core.config import settings
 from app.core.prompts import build_refactor_prompt, build_self_heal_prompt
+from app.services.code_contract import (
+    CodeContract,
+    ContractReport,
+    build_contract,
+    validate_output,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -69,7 +75,9 @@ class LLMAgent:
             raise LLMUnavailableError("LLM returned an empty response.")
         return content
 
-    async def refactor(self, legacy_code: str, context_rule: str, findings: list[dict]) -> str:
+    async def refactor(
+        self, legacy_code: str, context_rule: str, findings: list[dict]
+    ) -> str:
         """Run a single refactoring pass and return only the raw code."""
         prompt = build_refactor_prompt(legacy_code, context_rule, findings)
         raw = await self._complete(self._get_system_prompt(), prompt)
@@ -80,6 +88,73 @@ class LLMAgent:
         prompt = build_self_heal_prompt(context_rule, broken_code, error)
         raw = await self._complete(self._get_system_prompt(), prompt)
         return self._extract_code(raw)
+
+    @staticmethod
+    def contract_for(source_code: str, language: str = "python") -> CodeContract:
+        """Fingerprint the source so the output can be checked for shrinkage."""
+        return build_contract(source_code, language)
+
+    @staticmethod
+    def validate_output(
+        source_code: str,
+        output_code: str,
+        *,
+        language: str = "python",
+        min_line_ratio: float | None = None,
+        allowed_extra_imports: list[str] | None = None,
+    ) -> ContractReport:
+        """Check generated code against the source-level output contract.
+
+        This is the programmatic guard against the model deleting public
+        symbols or truncating the file to make a migration "pass".
+        """
+        return validate_output(
+            source_code,
+            output_code,
+            language=language,
+            min_line_ratio=(
+                settings.contract_min_line_ratio
+                if min_line_ratio is None
+                else min_line_ratio
+            ),
+            allowed_extra_imports=(
+                settings.contract_extra_imports
+                if allowed_extra_imports is None
+                else allowed_extra_imports
+            ),
+            enabled=settings.contract_enabled,
+        )
+
+    async def refactor_enforced(
+        self,
+        legacy_code: str,
+        context_rule: str,
+        findings: list[dict],
+        *,
+        language: str = "python",
+        max_repairs: int | None = None,
+    ) -> tuple[str, ContractReport, int]:
+        """Refactor and repair the output until it satisfies the contract.
+
+        Returns ``(code, report, repairs)``.  The caller must still check
+        ``report.ok``: when the repair budget is exhausted the last generated
+        code is returned with its violations so the pipeline can fail loudly
+        instead of silently accepting a truncated file.
+        """
+        budget = settings.max_self_heal_attempts if max_repairs is None else max_repairs
+        code = await self.refactor(legacy_code, context_rule, findings)
+        report = self.validate_output(legacy_code, code, language=language)
+        repairs = 0
+        while not report.ok and repairs < budget:
+            repairs += 1
+            logger.warning(
+                "LLM output violated the migration contract, requesting repair",
+                attempt=repairs,
+                violations=[v.code for v in report.violations],
+            )
+            code = await self.self_heal(code, report.to_error_text(), context_rule)
+            report = self.validate_output(legacy_code, code, language=language)
+        return code, report, repairs
 
     @staticmethod
     def _get_system_prompt() -> str:
@@ -95,7 +170,9 @@ class LLMAgent:
         """Strip accidental markdown fences and conversational filler."""
         cleaned = raw.strip()
         fence = re.search(
-            r"```(?:python|py|javascript|typescript|ts|js|text)?\s*\n(.*?)\n```", cleaned, re.DOTALL
+            r"```(?:python|py|javascript|typescript|ts|js|text)?\s*\n(.*?)\n```",
+            cleaned,
+            re.DOTALL,
         )
         if fence:
             return fence.group(1).rstrip() + "\n"

@@ -25,7 +25,9 @@ async def test_mfa_setup_returns_secret_and_uri(client, db_session):
 async def test_mfa_setup_conflict_when_already_enabled(client, db_session):
     user, headers, data = await _setup_mfa(client, db_session)
     code = pyotp.TOTP(data["secret"]).now()
-    resp = await client.post("/api/v1/auth/mfa/enable", json={"code": code}, headers=headers)
+    resp = await client.post(
+        "/api/v1/auth/mfa/enable", json={"code": code}, headers=headers
+    )
     assert resp.status_code == 200, resp.text
     resp = await client.post("/api/v1/auth/mfa/setup", headers=headers)
     assert resp.status_code == 409
@@ -33,7 +35,9 @@ async def test_mfa_setup_conflict_when_already_enabled(client, db_session):
 
 async def test_mfa_enable_rejects_bad_code(client, db_session):
     _, headers, _ = await _setup_mfa(client, db_session)
-    resp = await client.post("/api/v1/auth/mfa/enable", json={"code": "000000"}, headers=headers)
+    resp = await client.post(
+        "/api/v1/auth/mfa/enable", json={"code": "000000"}, headers=headers
+    )
     assert resp.status_code == 400
 
 

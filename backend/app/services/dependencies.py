@@ -1,22 +1,27 @@
 from __future__ import annotations
 
-import asyncio
+import ast
+import hashlib
 import logging
 import os
 import re
-import shutil
 import subprocess
-import sys
 import tempfile
+import uuid
 import venv
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
 import docker
+from docker.errors import ContainerError
 
 from app.core.config import settings
-from app.services.sandbox import DockerSandbox, VerificationResult
+from app.services.sandbox import (
+    DockerSandbox,
+    VerificationResult,
+    extract_container_error_output,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +29,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class DependencySpec:
     """Specification for a Python dependency."""
+
     name: str
     version: Optional[str] = None
     extras: list[str] = field(default_factory=list)
@@ -42,6 +48,7 @@ class DependencySpec:
 @dataclass
 class DependencyResolutionResult:
     """Result of dependency resolution."""
+
     success: bool
     requirements: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
@@ -52,7 +59,7 @@ class DependencyResolutionResult:
 class DependencyDetector:
     """
     Detects dependencies from Python code using AST analysis.
-    
+
     Supports:
     - Standard imports (import X, from X import Y)
     - Conditional imports
@@ -61,20 +68,80 @@ class DependencyDetector:
     """
 
     # Common stdlib modules to exclude
-    STDLIB_MODULES = frozenset({
-        "os", "sys", "json", "re", "math", "random", "datetime", "time",
-        "collections", "itertools", "functools", "pathlib", "typing",
-        "dataclasses", "enum", "abc", "contextlib", "asyncio", "logging",
-        "hashlib", "uuid", "decimal", "fractions", "statistics", "string",
-        "textwrap", "unicodedata", "html", "xml", "csv", "sqlite3",
-        "subprocess", "multiprocessing", "threading", "queue", "concurrent",
-        "argparse", "configparser", "toml", "yaml", "pickle", "shelve",
-        "io", "tempfile", "shutil", "glob", "fnmatch", "fileinput",
-        "linecache", "traceback", "inspect", "ast", "symbol", "token",
-        "keyword", "tokenize", "tabnanny", "pyclbr", "py_compile",
-        "compileall", "dis", "opcode", "builtins", "types", "copy",
-        "pprint", "reprlib", "numbers", "operator", "functools",
-    })
+    STDLIB_MODULES = frozenset(
+        {
+            "os",
+            "sys",
+            "json",
+            "re",
+            "math",
+            "random",
+            "datetime",
+            "time",
+            "collections",
+            "itertools",
+            "functools",
+            "pathlib",
+            "typing",
+            "dataclasses",
+            "enum",
+            "abc",
+            "contextlib",
+            "asyncio",
+            "logging",
+            "hashlib",
+            "uuid",
+            "decimal",
+            "fractions",
+            "statistics",
+            "string",
+            "textwrap",
+            "unicodedata",
+            "html",
+            "xml",
+            "csv",
+            "sqlite3",
+            "subprocess",
+            "multiprocessing",
+            "threading",
+            "queue",
+            "concurrent",
+            "argparse",
+            "configparser",
+            "toml",
+            "yaml",
+            "pickle",
+            "shelve",
+            "io",
+            "tempfile",
+            "shutil",
+            "glob",
+            "fnmatch",
+            "fileinput",
+            "linecache",
+            "traceback",
+            "inspect",
+            "ast",
+            "symbol",
+            "token",
+            "keyword",
+            "tokenize",
+            "tabnanny",
+            "pyclbr",
+            "py_compile",
+            "compileall",
+            "dis",
+            "opcode",
+            "builtins",
+            "types",
+            "copy",
+            "pprint",
+            "reprlib",
+            "numbers",
+            "operator",
+            "functools",
+        }
+    )
 
     # Common third-party packages with known import names
     IMPORT_TO_PACKAGE = {
@@ -111,7 +178,6 @@ class DependencyDetector:
         "wandb": "wandb",
         "mlflow": "mlflow",
         "pytest": "pytest",
-        "httpx": "httpx",
         "aiohttp": "aiohttp",
         "uvicorn": "uvicorn",
         "gunicorn": "gunicorn",
@@ -189,7 +255,7 @@ class DependencyDetector:
 class DependencyResolver:
     """
     Resolves and installs dependencies in isolated environments.
-    
+
     Supports:
     - Virtual environment creation
     - Pip installation with caching
@@ -218,6 +284,7 @@ class DependencyResolver:
     ) -> DependencyResolutionResult:
         """Resolve and install dependencies in a venv."""
         import time
+
         start = time.monotonic()
 
         if self.use_docker:
@@ -250,8 +317,12 @@ class DependencyResolver:
         venv.create(path, with_pip=True, clear=True)
 
     def _upgrade_pip(self, pip: Path) -> None:
-        subprocess.run([str(pip), "install", "-U", "pip", "setuptools", "wheel"],
-                       check=True, capture_output=True, timeout=60)
+        subprocess.run(
+            [str(pip), "install", "-U", "pip", "setuptools", "wheel"],
+            check=True,
+            capture_output=True,
+            timeout=60,
+        )
 
     def _install_packages(
         self,
@@ -271,9 +342,12 @@ class DependencyResolver:
         """Get installed package versions."""
         result = subprocess.run(
             [str(pip), "list", "--format=json"],
-            check=True, capture_output=True, text=True
+            check=True,
+            capture_output=True,
+            text=True,
         )
         import json
+
         return {pkg["name"]: pkg["version"] for pkg in json.loads(result.stdout)}
 
     def _resolve_docker(
@@ -284,30 +358,38 @@ class DependencyResolver:
     ) -> DependencyResolutionResult:
         """Resolve dependencies in Docker container for production parity."""
         import time
+
         start = time.monotonic()
 
         try:
             client = docker.from_env()
             # Build a temporary image with dependencies
-            dockerfile = self._generate_dockerfile(packages, python_version, constraints)
-            
+            dockerfile = self._generate_dockerfile(
+                packages, python_version, constraints
+            )
+
             with tempfile.TemporaryDirectory() as build_dir:
                 Path(build_dir).joinpath("Dockerfile").write_text(dockerfile)
+                tag = f"omnimigrate-deps-{uuid.uuid4().hex[:8]}"
                 image, _ = client.images.build(
                     path=build_dir,
-                    tag=f"omnimigrate-deps-{uuid.uuid4().hex[:8]}",
+                    tag=tag,
                     rm=True,
                 )
-                
+
                 # Extract installed versions
                 container = client.containers.run(
-                    image.id,
+                    image.id or tag,
                     command=["pip", "list", "--format=json"],
                     remove=True,
                 )
                 import json
-                installed = {pkg["name"]: pkg["version"] for pkg in json.loads(container.decode())}
-                
+
+                installed = {
+                    pkg["name"]: pkg["version"]
+                    for pkg in json.loads(container.decode())
+                }
+
                 return DependencyResolutionResult(
                     success=True,
                     requirements=packages,
@@ -343,7 +425,7 @@ class DependencyResolver:
 class SandboxEnvironment:
     """
     Complete sandbox environment with dynamic dependency management.
-    
+
     Features:
     - Automatic dependency detection from code
     - On-demand virtual environment creation
@@ -366,7 +448,7 @@ class SandboxEnvironment:
     ) -> tuple[str, DependencyResolutionResult]:
         """
         Prepare isolated environment for code execution.
-        
+
         Returns:
             Tuple of (venv_path, resolution_result)
         """
@@ -382,7 +464,7 @@ class SandboxEnvironment:
         with tempfile.TemporaryDirectory(prefix="omnimigrate_env_") as tmpdir:
             venv_path = Path(tmpdir) / ".venv"
             result = self.resolver.resolve(all_packages)
-            
+
             if result.success:
                 # Return the venv path for reuse
                 # In production, you'd cache this and return a handle
@@ -394,7 +476,7 @@ class SandboxEnvironment:
 class DynamicSandbox(DockerSandbox):
     """
     Extended Docker sandbox with dynamic dependency installation.
-    
+
     Features:
     - Pre-installs detected dependencies in container
     - Caches dependency layers
@@ -410,15 +492,15 @@ class DynamicSandbox(DockerSandbox):
     def _contains_test_code(self, code: str) -> bool:
         """Check if code contains test functions or test file patterns."""
         # Check for test function definitions
-        if re.search(r'def\s+test_\w+\s*\(', code):
+        if re.search(r"def\s+test_\w+\s*\(", code):
             return True
-        if re.search(r'def\s+pytest_\w+\s*\(', code):
+        if re.search(r"def\s+pytest_\w+\s*\(", code):
             return True
         # Check for pytest decorators
-        if re.search(r'@pytest\.', code):
+        if re.search(r"@pytest\.", code):
             return True
         # Check for unittest.TestCase
-        if re.search(r'class\s+\w+Test\s*\(.*TestCase\)', code):
+        if re.search(r"class\s+\w+Test\s*\(.*TestCase\)", code):
             return True
         return False
 
@@ -446,11 +528,16 @@ class DynamicSandbox(DockerSandbox):
             compile(code, "<omnimigrate-output>", "exec")
         except (SyntaxError, ValueError, TypeError) as exc:
             return VerificationResult(
-                success=False, syntax_ok=False, runtime_ok=False, errors=[f"SyntaxError: {exc}"]
+                success=False,
+                syntax_ok=False,
+                runtime_ok=False,
+                errors=[f"SyntaxError: {exc}"],
             )
 
         if not self.enabled:
-            return VerificationResult(success=True, syntax_ok=True, runtime_ok=True, errors=[])
+            return VerificationResult(
+                success=True, syntax_ok=True, runtime_ok=True, errors=[]
+            )
 
         # Protect test code from self-healing modifications
         if self._contains_test_code(code):
@@ -490,8 +577,9 @@ class DynamicSandbox(DockerSandbox):
                     tag=cache_key,
                     rm=True,
                 )
-                self._dep_cache[cache_key] = image.id
-                return image.id
+                image_id = image.id or cache_key
+                self._dep_cache[cache_key] = image_id
+                return image_id
         except Exception as e:
             logger.warning(f"Failed to build dependency image: {e}, using base image")
             return self.image
@@ -502,9 +590,14 @@ RUN pip install -U pip setuptools wheel
 RUN pip install --no-cache-dir {' '.join(packages)}
 """
 
-    def _execute_in_container_with_image(self, code: str, image: str) -> VerificationResult:
+    def _execute_in_container_with_image(
+        self, code: str, image: str
+    ) -> VerificationResult:
         """Execute code in container with specific image."""
-        with tempfile.TemporaryDirectory(prefix="omnimigrate_sandbox_", dir="/tmp/omnimigrate") as tmpdir:
+        Path("/tmp/omnimigrate").mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(
+            prefix="omnimigrate_sandbox_", dir="/tmp/omnimigrate"
+        ) as tmpdir:
             workdir = Path(tmpdir)
             code_file = workdir / "script.py"
             code_file.write_text(code, encoding="utf-8")
@@ -520,31 +613,29 @@ RUN pip install --no-cache-dir {' '.join(packages)}
 
             try:
                 container = self.client.containers.run(**container_config)
-                stdout = container.decode("utf-8") if isinstance(container, bytes) else container
-                return VerificationResult(
-                    success=True, syntax_ok=True, runtime_ok=True, errors=[], stdout=stdout
+                stdout = (
+                    container.decode("utf-8")
+                    if isinstance(container, bytes)
+                    else container
                 )
-            except docker.errors.ContainerError as e:
-                stderr = str(e)
-                stdout = getattr(e, 'stdout', '') or ''
-                if isinstance(stdout, bytes):
-                    stdout = stdout.decode("utf-8", errors="replace")
                 return VerificationResult(
-                    success=False, syntax_ok=True, runtime_ok=False,
+                    success=True,
+                    syntax_ok=True,
+                    runtime_ok=True,
+                    errors=[],
+                    stdout=stdout,
+                )
+            except ContainerError as e:
+                stdout, stderr = extract_container_error_output(e)
+                return VerificationResult(
+                    success=False,
+                    syntax_ok=True,
+                    runtime_ok=False,
                     errors=[stderr.strip() or f"Exit code {e.exit_status}"],
                     stdout=stdout,
                     stderr=stderr,
                 )
 
-
-# Backward compatibility
-import hashlib
-import re
-from typing import Optional
-
-import docker
-
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -558,6 +649,7 @@ TEST_FILE_PATTERNS = [
 ]
 TEST_FUNCTION_PREFIXES = ("test_", "pytest_")
 
+
 def _is_test_file(filepath: str) -> bool:
     """Check if a file path matches test file patterns."""
     for pattern in TEST_FILE_PATTERNS:
@@ -565,14 +657,10 @@ def _is_test_file(filepath: str) -> bool:
             return True
     return False
 
+
 def _is_test_function(func_name: str) -> bool:
     """Check if a function name indicates a test function."""
     return any(func_name.startswith(prefix) for prefix in TEST_FUNCTION_PREFIXES)
-
-# Backward compatibility
-import hashlib
-import ast
-import uuid
 
 
 def detect_imports(code: str) -> list[str]:

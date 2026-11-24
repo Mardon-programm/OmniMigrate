@@ -47,9 +47,7 @@ class GitHubIntegrationService:
         if remote_url:
             token_remote = remote_url
         else:
-            token_remote = (
-                f"https://x-access-token:{github_token}@github.com/{repo_owner}/{repo_name}.git"
-            )
+            token_remote = f"https://x-access-token:{github_token}@github.com/{repo_owner}/{repo_name}.git"
         name = author_name or settings.git_author_name
         email = author_email or settings.git_author_email
 
@@ -80,7 +78,9 @@ class GitHubIntegrationService:
         finally:
             _run_git(["remote", "set-url", "origin", remote], project_dir, env)
             with contextlib.suppress(subprocess.CalledProcessError):
-                _run_git(["config", "--unset-all", "http.extraheader"], project_dir, env)
+                _run_git(
+                    ["config", "--unset-all", "http.extraheader"], project_dir, env
+                )
         return remote
 
     # --- Pull requests -----------------------------------------------------
@@ -110,7 +110,11 @@ class GitHubIntegrationService:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(url, headers=headers, json=payload)
         if response.status_code >= 400:
-            detail = response.json().get("message", response.text) if response.content else ""
+            detail = (
+                response.json().get("message", response.text)
+                if response.content
+                else ""
+            )
             raise GitHubIntegrationError(
                 f"GitHub rejected the pull request ({response.status_code}): {detail}"
             )

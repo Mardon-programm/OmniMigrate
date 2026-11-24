@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, HTTPException, status
-from redis.asyncio import Redis
 
 from app.core.database import get_redis
 from app.core.deps import CurrentUser, DbSession
@@ -36,7 +35,9 @@ def _split_repo_url(repo_url: str) -> tuple[str, str]:
     parts = tail.split("/")
     if len(parts) >= 2:
         return parts[-2], parts[-1]
-    raise HTTPException(status_code=422, detail="Unable to parse repo owner/name from repo_url.")
+    raise HTTPException(
+        status_code=422, detail="Unable to parse repo owner/name from repo_url."
+    )
 
 
 @router.post(
@@ -97,7 +98,9 @@ async def run_autonomous_migration(
     await session.commit()
     await session.refresh(job)
 
-    encrypted_token = encrypt_token(payload.github_token) if payload.github_token else None
+    encrypted_token = (
+        encrypt_token(payload.github_token) if payload.github_token else None
+    )
     try:
         await enqueue_autonomous_migration(
             job_id=job.id,
@@ -141,7 +144,7 @@ async def get_autonomous_job(
     if project is None or (project.owner_id != user.id and user.role != UserRole.admin):
         raise HTTPException(status_code=403, detail="Access denied.")
 
-    redis: Redis = await get_redis()
+    redis = await get_redis()
     live = None
     raw = await redis.get(STATE_KEY.format(job_id=job.id))
     if raw:

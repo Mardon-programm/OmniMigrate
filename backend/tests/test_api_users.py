@@ -9,7 +9,9 @@ class TestUsers:
         assert resp.status_code == 403
 
     async def test_list_users_as_admin(self, client, db_session):
-        admin = await make_user(db_session, email="admin@example.com", role=UserRole.admin)
+        admin = await make_user(
+            db_session, email="admin@example.com", role=UserRole.admin
+        )
         await make_user(db_session, email="u2@example.com")
         resp = await client.get(
             "/api/v1/users", headers=auth_headers(admin.id, UserRole.admin.value)
@@ -19,7 +21,9 @@ class TestUsers:
 
     async def test_get_self(self, client, db_session):
         user = await make_user(db_session, email="u3@example.com")
-        resp = await client.get(f"/api/v1/users/{user.id}", headers=auth_headers(user.id))
+        resp = await client.get(
+            f"/api/v1/users/{user.id}", headers=auth_headers(user.id)
+        )
         assert resp.status_code == 200
         assert resp.json()["email"] == "u3@example.com"
 
@@ -48,7 +52,9 @@ class TestUsers:
         assert resp.status_code == 403
 
     async def test_create_user_as_admin(self, client, db_session):
-        admin = await make_user(db_session, email="admin2@example.com", role=UserRole.admin)
+        admin = await make_user(
+            db_session, email="admin2@example.com", role=UserRole.admin
+        )
         resp = await client.post(
             "/api/v1/users",
             headers=auth_headers(admin.id, UserRole.admin.value),
@@ -63,7 +69,9 @@ class TestUsers:
         assert resp.json()["role"] == "engineer"
 
     async def test_create_user_duplicate(self, client, db_session):
-        admin = await make_user(db_session, email="admin3@example.com", role=UserRole.admin)
+        admin = await make_user(
+            db_session, email="admin3@example.com", role=UserRole.admin
+        )
         await make_user(db_session, email="dup@example.com")
         resp = await client.post(
             "/api/v1/users",
@@ -119,7 +127,10 @@ class TestUsers:
         resp = await client.post(
             f"/api/v1/users/{user.id}/password",
             headers=auth_headers(user.id),
-            json={"current_password": "wrong-password", "new_password": "newpassword123"},
+            json={
+                "current_password": "wrong-password",
+                "new_password": "newpassword123",
+            },
         )
         assert resp.status_code == 400
 

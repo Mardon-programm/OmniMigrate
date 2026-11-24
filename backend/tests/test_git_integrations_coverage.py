@@ -122,7 +122,9 @@ class TestCommitAndPushNothingToCommit:
 
 
 class TestCommitAndPushRetry:
-    def test_force_with_lease_failure_triggers_plain_push(self, monkeypatch, bare_remote):
+    def test_force_with_lease_failure_triggers_plain_push(
+        self, monkeypatch, bare_remote
+    ):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
             _git(repo, "init", "-b", "main")
@@ -141,7 +143,9 @@ class TestCommitAndPushRetry:
                 if args and args[0] == "push":
                     push_count += 1
                     if push_count == 1 and "--force-with-lease" in args:
-                        raise subprocess.CalledProcessError(1, ["git", "push"], stderr="reject")
+                        raise subprocess.CalledProcessError(
+                            1, ["git", "push"], stderr="reject"
+                        )
                     return
                 if args and args[0] == "commit":
                     raise subprocess.CalledProcessError(
@@ -170,7 +174,9 @@ class TestCommitAndPushRetry:
 class TestCreatePullRequest:
     @pytest.fixture()
     def service(self):
-        return GitHubIntegrationService(token="ghp_test", api_url="https://api.github.com")
+        return GitHubIntegrationService(
+            token="ghp_test", api_url="https://api.github.com"
+        )
 
     async def test_create_pull_request_success(self, service, monkeypatch):
         mock_response = MagicMock()
@@ -255,11 +261,17 @@ class TestCreatePullRequest:
                 body="...",
             )
 
-    async def test_create_pull_request_sends_correct_payload(self, service, monkeypatch):
+    async def test_create_pull_request_sends_correct_payload(
+        self, service, monkeypatch
+    ):
         mock_response = MagicMock()
         mock_response.status_code = 201
         mock_response.content = b'{"number": 1, "html_url": "url", "url": "api_url"}'
-        mock_response.json.return_value = {"number": 1, "html_url": "url", "url": "api_url"}
+        mock_response.json.return_value = {
+            "number": 1,
+            "html_url": "url",
+            "url": "api_url",
+        }
 
         captured = {}
         mock_client_instance = AsyncMock()

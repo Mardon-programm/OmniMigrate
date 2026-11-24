@@ -1,0 +1,119 @@
+services:
+  - type: web
+    name: omnimigrate-backend
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    region: oregon
+    plan: starter
+    healthCheckPath: /healthz
+    # Apply schema migrations before the new web process takes traffic.
+    preDeployCommand: alembic upgrade heads
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai/
+      - key: OPENAI_MODEL
+        value: gemini-2.5-flash
+      # Anti-shrinkage output contract — never disable in production.
+      - key: CONTRACT_ENABLED
+        value: "true"
+      - key: CONTRACT_MIN_LINE_RATIO
+        value: "0.75"
+      - key: LLM_MAX_TOKENS
+        value: "65536"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "false"
+      - key: ENVIRONMENT
+        value: production
+      - key: ALLOWED_ORIGINS
+        value: '["https://your-vercel-app.vercel.app"]'
+      - key: PADDLE_API_KEY
+        sync: false
+      - key: PADDLE_VENDOR_ID
+        sync: false
+      - key: PADDLE_WEBHOOK_SECRET
+        sync: false
+      - key: PADDLE_PRICE_STARTER_MONTHLY
+        sync: false
+      - key: PADDLE_PRICE_PRO_MONTHLY
+        sync: false
+      - key: PADDLE_PRICE_PACK_10
+        sync: false
+      - key: PADDLE_PRICE_PACK_50
+        sync: false
+      - key: PADDLE_PRICE_PACK_100
+        sync: false
+      - key: PADDLE_PRICE_PACK_500
+        sync: false
+      - key: PADDLE_PRICE_PACK_1000
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM_EMAIL
+        sync: false
+      - key: SMTP_FROM_NAME
+        value: "OmniMigrate"
+      - key: SMTP_USE_TLS
+        value: "true"
+      - key: SENTRY_DSN
+        sync: false
+    autoDeploy: true
+
+  - type: worker
+    name: omnimigrate-worker
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: python -m app.worker_runner
+    region: oregon
+    plan: starter
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai/
+      - key: OPENAI_MODEL
+        value: gemini-2.5-flash
+      # Anti-shrinkage output contract — never disable in production.
+      - key: CONTRACT_ENABLED
+        value: "true"
+      - key: CONTRACT_MIN_LINE_RATIO
+        value: "0.75"
+      - key: LLM_MAX_TOKENS
+        value: "65536"
+      - key: SECRET_KEY
+        sync: false
+      - key: DEBUG
+        value: "false"
+      - key: ENVIRONMENT
+        value: production
+    autoDeploy: true
+
+databases:
+  - name: omnimigrate-db
+    databaseName: omnimigrate
+    user: omnimigrate
+    plan: starter
+    region: oregon
+
+  - name: omnimigrate-redis
+    plan: starter
+    region: oregon

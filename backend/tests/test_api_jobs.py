@@ -54,7 +54,9 @@ class TestSubmitJob:
         resp = await _submit_job(client, auth_headers(other.id), project["id"])
         assert resp.status_code == 403
 
-    async def test_submit_marks_failed_when_queue_down(self, client, db_session, monkeypatch):
+    async def test_submit_marks_failed_when_queue_down(
+        self, client, db_session, monkeypatch
+    ):
         _, headers, project = await _setup_owner_project(client, db_session)
 
         async def _boom(job_id: int):
@@ -83,7 +85,9 @@ class TestListJobs:
     async def test_list_filtered_by_project(self, client, db_session):
         _, headers, project = await _setup_owner_project(client, db_session)
         await _submit_job(client, headers, project["id"])
-        resp = await client.get(f"/api/v1/jobs?project_id={project['id']}", headers=headers)
+        resp = await client.get(
+            f"/api/v1/jobs?project_id={project['id']}", headers=headers
+        )
         assert resp.status_code == 200
         assert len(resp.json()) == 1
 
@@ -102,7 +106,9 @@ class TestListJobs:
     async def test_list_as_admin_sees_all(self, client, db_session):
         _, headers, project = await _setup_owner_project(client, db_session)
         await _submit_job(client, headers, project["id"])
-        admin = await make_user(db_session, email="ljadmin@example.com", role=UserRole.admin)
+        admin = await make_user(
+            db_session, email="ljadmin@example.com", role=UserRole.admin
+        )
         resp = await client.get(
             "/api/v1/jobs", headers=auth_headers(admin.id, UserRole.admin.value)
         )
@@ -127,7 +133,9 @@ class TestGetJob:
         _, headers, project = await _setup_owner_project(client, db_session)
         job = (await _submit_job(client, headers, project["id"])).json()
         other = await make_user(db_session, email="gother@example.com")
-        resp = await client.get(f"/api/v1/jobs/{job['id']}", headers=auth_headers(other.id))
+        resp = await client.get(
+            f"/api/v1/jobs/{job['id']}", headers=auth_headers(other.id)
+        )
         assert resp.status_code == 403
 
     async def test_get_job_status(self, client, db_session):
@@ -188,7 +196,9 @@ class TestCancelJob:
         _, headers, project = await _setup_owner_project(client, db_session)
         job = (await _submit_job(client, headers, project["id"])).json()
         other = await make_user(db_session, email="cancel_other@example.com")
-        resp = await client.delete(f"/api/v1/jobs/{job['id']}", headers=auth_headers(other.id))
+        resp = await client.delete(
+            f"/api/v1/jobs/{job['id']}", headers=auth_headers(other.id)
+        )
         assert resp.status_code == 403
 
 
