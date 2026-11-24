@@ -119,7 +119,9 @@ def test_removing_deprecated_imports_is_not_truncation():
 
 def test_truncated_logic_is_rejected_even_when_imports_survive():
     source = "\n".join(f"def f{i}():\n    return {i}\n" for i in range(20))
-    output = "import os\n" + "\n".join(f"def f{i}():\n    return {i}\n" for i in range(3))
+    output = "import os\n" + "\n".join(
+        f"def f{i}():\n    return {i}\n" for i in range(3)
+    )
     report = validate_output(source, output)
     assert "truncated-output" in _codes(report)
     assert report.output_logic_lines == 6
@@ -139,7 +141,7 @@ def test_complete_migration_passes():
 
 def test_deleted_function_is_rejected():
     truncated = COMPLETE.replace(
-        '\ndef fetch_catalog(endpoint: str) -> str:\n    return endpoint\n', ""
+        "\ndef fetch_catalog(endpoint: str) -> str:\n    return endpoint\n", ""
     )
     report = validate_output(SOURCE, truncated)
     assert not report.ok
@@ -223,11 +225,9 @@ class TestRefactorEnforced:
     async def test_repairs_deleted_symbol(self, monkeypatch):
         agent = LLMAgent()
         truncated = COMPLETE.replace(
-            '\ndef fetch_catalog(endpoint: str) -> str:\n    return endpoint\n', ""
+            "\ndef fetch_catalog(endpoint: str) -> str:\n    return endpoint\n", ""
         )
-        monkeypatch.setattr(
-            agent, "refactor", AsyncMock(return_value=truncated)
-        )
+        monkeypatch.setattr(agent, "refactor", AsyncMock(return_value=truncated))
         heal = AsyncMock(return_value=COMPLETE)
         monkeypatch.setattr(agent, "self_heal", heal)
 
@@ -243,14 +243,10 @@ class TestRefactorEnforced:
     async def test_exhausted_budget_returns_violating_report(self, monkeypatch):
         agent = LLMAgent()
         truncated = COMPLETE.replace(
-            '\ndef fetch_catalog(endpoint: str) -> str:\n    return endpoint\n', ""
+            "\ndef fetch_catalog(endpoint: str) -> str:\n    return endpoint\n", ""
         )
-        monkeypatch.setattr(
-            agent, "refactor", AsyncMock(return_value=truncated)
-        )
-        monkeypatch.setattr(
-            agent, "self_heal", AsyncMock(return_value=truncated)
-        )
+        monkeypatch.setattr(agent, "refactor", AsyncMock(return_value=truncated))
+        monkeypatch.setattr(agent, "self_heal", AsyncMock(return_value=truncated))
 
         code, report, repairs = await agent.refactor_enforced(
             SOURCE, "modernize", [], max_repairs=2
@@ -279,18 +275,18 @@ def test_validate_output_uses_settings_defaults(monkeypatch):
 
 def test_newly_undefined_names_are_rejected():
     pytest.importorskip("pyflakes")
-    source = '''def render(items):
+    source = """def render(items):
     results = []
     for item in items:
         results.append(item)
     return results
-'''
-    output = '''def render(items):
+"""
+    output = """def render(items):
     results = []
     for item in items:
         results.append(element)
     return results
-'''
+"""
     report = validate_output(source, output)
     assert not report.ok
     assert "undefined-names" in _codes(report)

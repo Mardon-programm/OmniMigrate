@@ -20,13 +20,38 @@ configure_logging(debug=settings.debug)
 logger = structlog.get_logger(__name__)
 
 
+def _production_contract_issues() -> list[str]:
+    """Anti-shrinkage guarantees must never be disabled in production."""
+    issues: list[str] = []
+    if not settings.contract_enabled:
+        issues.append("CONTRACT_ENABLED must be true in production")
+    ratio = settings.contract_min_line_ratio
+    # Pydantic guarantees a float in production; tolerate test doubles that
+    # replace the whole settings object with a mock.
+    if isinstance(ratio, (int, float)) and ratio < 0.75:
+        issues.append("CONTRACT_MIN_LINE_RATIO must be at least 0.75 in production")
+    return issues
+
+
 def _validate_production_secrets() -> None:
     """Refuse to start in production if critical secrets are at default values."""
     if settings.environment != "production":
         return
     issues: list[str] = []
-    if settings.secret_key == "change-me-in-production" or len(settings.secret_key) < 32:
-        issues.append("SECRET_KEY must be set to a secure random value (>=32 chars)")
+    secret_key = settings.secret_key.strip()
+    placeholder_markers = (
+        "change-me",
+        "your-64-char",
+        "secret-key-here",
+        "replace-me",
+        "example",
+    )
+    if len(secret_key) < 32 or any(
+        m in secret_key.lower() for m in placeholder_markers
+    ):
+        issues.append(
+            "SECRET_KEY must be a real random value (>=32 chars), not a placeholder"
+        )
     if not settings.database_url or "omnimigrate:omnimigrate" in settings.database_url:
         issues.append("DATABASE_URL must use strong credentials, not the defaults")
     if settings.bcrypt_rounds < 12:
@@ -37,6 +62,7 @@ def _validate_production_secrets() -> None:
         issues.append("PADDLE_WEBHOOK_SECRET required when PADDLE_API_KEY is set")
     if settings.smtp_host and (not settings.smtp_user or not settings.smtp_password):
         issues.append("SMTP_USER and SMTP_PASSWORD required when SMTP_HOST is set")
+    issues.extend(_production_contract_issues())
     if issues:
         msg = "Startup secret validation failed:\n  - " + "\n  - ".join(issues)
         logger.critical(msg)
@@ -143,18 +169,15 @@ async def readyz(request: Request) -> JSONResponse:
     all_ok = True
 
     # Redis
-    redis_ok = True
     try:
         redis = request.app.state.redis
         await redis.ping()
         checks["redis"] = "ok"
     except Exception:
-        redis_ok = False
         checks["redis"] = "unavailable"
         all_ok = False
 
     # Database
-    db_ok = True
     try:
         from sqlalchemy import text
         from app.core.database import AsyncSessionLocal
@@ -163,36 +186,38 @@ async def readyz(request: Request) -> JSONResponse:
             await session.execute(text("SELECT 1"))
         checks["database"] = "ok"
     except Exception:
-        db_ok = False
         checks["database"] = "unavailable"
         all_ok = False
 
     # LLM API (optional check)
-    llm_ok = True
     if settings.openai_api_key:
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=5.0) as client:
                 if settings.openai_base_url:
-                    await client.get(f"{settings.openai_base_url}/models", headers={"Authorization": f"Bearer {settings.openai_api_key}"})
+                    await client.get(
+                        f"{settings.openai_base_url}/models",
+                        headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+                    )
                 else:
-                    await client.get("https://api.openai.com/v1/models", headers={"Authorization": f"Bearer {settings.openai_api_key}"})
+                    await client.get(
+                        "https://api.openai.com/v1/models",
+                        headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+                    )
             checks["llm_api"] = "ok"
         except Exception:
-            llm_ok = False
             checks["llm_api"] = "unavailable"
             # Don't fail readiness for LLM API
     else:
         checks["llm_api"] = "not_configured"
 
     # Worker queue
-    queue_ok = True
     try:
         redis = request.app.state.redis
         queue_len = await redis.llen("arq:queue:default")
         checks["worker_queue"] = f"{queue_len} jobs"
     except Exception:
-        queue_ok = False
         checks["worker_queue"] = "unavailable"
 
     status_code = 200 if all_ok else 503

@@ -38,7 +38,9 @@ class Settings(BaseSettings):
     rate_limit_window_seconds: int = 60
 
     # --- Database ---
-    database_url: str = "postgresql+asyncpg://omnimigrate:omnimigrate@postgres:5432/omnimigrate"
+    database_url: str = (
+        "postgresql+asyncpg://omnimigrate:omnimigrate@postgres:5432/omnimigrate"
+    )
 
     # --- Redis ---
     redis_url: str = "redis://redis:6379/0"
@@ -50,7 +52,9 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     openai_base_url: str | None = None
     llm_temperature: float = 0.1
-    llm_max_tokens: int = 8192
+    # Large legacy modules need a big completion budget; the Zope proof run
+    # required 65536 tokens to return whole files without truncation.
+    llm_max_tokens: int = 65536
     llm_fallback_to_rules: bool = True
 
     # --- Output contract / anti-shrinkage guards ---

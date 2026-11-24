@@ -58,7 +58,9 @@ class TestRunAutonomous:
         async def _boom(**kwargs):
             raise RuntimeError("queue down")
 
-        monkeypatch.setattr("app.api.v1.autonomous_migration.enqueue_autonomous_migration", _boom)
+        monkeypatch.setattr(
+            "app.api.v1.autonomous_migration.enqueue_autonomous_migration", _boom
+        )
         resp = await client.post(
             "/api/v1/autonomous/run",
             headers=auth_headers(user.id),
@@ -69,7 +71,9 @@ class TestRunAutonomous:
     async def test_run_uses_existing_project(self, client, db_session):
         user = await make_user(db_session, email="auto5@example.com")
         headers = auth_headers(user.id)
-        await client.post("/api/v1/autonomous/run", headers=headers, json=await _run_payload())
+        await client.post(
+            "/api/v1/autonomous/run", headers=headers, json=await _run_payload()
+        )
         resp = await client.post(
             "/api/v1/autonomous/run", headers=headers, json=await _run_payload()
         )
@@ -100,7 +104,9 @@ class TestGetAutonomousJob:
 
     async def test_get_missing_job(self, client, db_session):
         user = await make_user(db_session, email="auto7@example.com")
-        resp = await client.get("/api/v1/autonomous/jobs/9999", headers=auth_headers(user.id))
+        resp = await client.get(
+            "/api/v1/autonomous/jobs/9999", headers=auth_headers(user.id)
+        )
         assert resp.status_code == 404
 
     async def test_get_foreign_job(self, client, db_session):

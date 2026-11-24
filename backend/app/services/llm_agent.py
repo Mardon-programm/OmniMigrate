@@ -75,7 +75,9 @@ class LLMAgent:
             raise LLMUnavailableError("LLM returned an empty response.")
         return content
 
-    async def refactor(self, legacy_code: str, context_rule: str, findings: list[dict]) -> str:
+    async def refactor(
+        self, legacy_code: str, context_rule: str, findings: list[dict]
+    ) -> str:
         """Run a single refactoring pass and return only the raw code."""
         prompt = build_refactor_prompt(legacy_code, context_rule, findings)
         raw = await self._complete(self._get_system_prompt(), prompt)
@@ -139,11 +141,7 @@ class LLMAgent:
         code is returned with its violations so the pipeline can fail loudly
         instead of silently accepting a truncated file.
         """
-        budget = (
-            settings.max_self_heal_attempts
-            if max_repairs is None
-            else max_repairs
-        )
+        budget = settings.max_self_heal_attempts if max_repairs is None else max_repairs
         code = await self.refactor(legacy_code, context_rule, findings)
         report = self.validate_output(legacy_code, code, language=language)
         repairs = 0
@@ -172,7 +170,9 @@ class LLMAgent:
         """Strip accidental markdown fences and conversational filler."""
         cleaned = raw.strip()
         fence = re.search(
-            r"```(?:python|py|javascript|typescript|ts|js|text)?\s*\n(.*?)\n```", cleaned, re.DOTALL
+            r"```(?:python|py|javascript|typescript|ts|js|text)?\s*\n(.*?)\n```",
+            cleaned,
+            re.DOTALL,
         )
         if fence:
             return fence.group(1).rstrip() + "\n"

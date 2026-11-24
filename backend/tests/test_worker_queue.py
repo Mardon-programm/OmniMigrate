@@ -2,8 +2,14 @@ class TestWorkerSettings:
     def test_functions_registered(self):
         from app.core.worker import WorkerSettings
 
-        assert "app.services.migration_service.run_migration_job" in WorkerSettings.functions
-        assert "app.services.orchestrator.run_autonomous_migration_job" in WorkerSettings.functions
+        assert (
+            "app.services.migration_service.run_migration_job"
+            in WorkerSettings.functions
+        )
+        assert (
+            "app.services.orchestrator.run_autonomous_migration_job"
+            in WorkerSettings.functions
+        )
 
     def test_priority_queues_listed(self):
         from app.core.worker import WorkerSettings

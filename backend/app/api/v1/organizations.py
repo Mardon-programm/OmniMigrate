@@ -64,7 +64,9 @@ async def create_organization(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    existing = await db.execute(select(Organization).where(Organization.slug == body.slug))
+    existing = await db.execute(
+        select(Organization).where(Organization.slug == body.slug)
+    )
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Slug already taken")
     org = Organization(name=body.name, slug=body.slug, description=body.description)
@@ -73,7 +75,9 @@ async def create_organization(
         await db.flush()
     except IntegrityError:
         await db.rollback()
-        raise HTTPException(status_code=409, detail="Slug or name already taken") from None
+        raise HTTPException(
+            status_code=409, detail="Slug or name already taken"
+        ) from None
     member = OrganizationMember(
         organization_id=org.id,
         user_id=user.id,
@@ -180,7 +184,9 @@ async def list_members(
     user, org, role = await _require_org_member(org_id, user, db)
     if role is None and user.role != UserRole.admin:
         raise HTTPException(status_code=403, detail="Not a member")
-    stmt = select(OrganizationMember).where(OrganizationMember.organization_id == org.id)
+    stmt = select(OrganizationMember).where(
+        OrganizationMember.organization_id == org.id
+    )
     result = await db.execute(stmt)
     return list(result.scalars().all())
 

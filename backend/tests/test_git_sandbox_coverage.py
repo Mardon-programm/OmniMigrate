@@ -221,7 +221,9 @@ class TestProcessDirectoryEdgeCases:
         f = tmp_path / "bad.py"
         f.write_bytes(b"\x80\x81\x82")
 
-        changes = GitSandboxService.process_directory(str(tmp_path), lambda code, rule: code, "")
+        changes = GitSandboxService.process_directory(
+            str(tmp_path), lambda code, rule: code, ""
+        )
         assert changes == []
 
     def test_skips_oserror_files(self, monkeypatch, tmp_path):
@@ -236,7 +238,9 @@ class TestProcessDirectoryEdgeCases:
             return original_read_text(self, *a, **kw)
 
         monkeypatch.setattr(Path, "read_text", bad_read)
-        changes = GitSandboxService.process_directory(str(tmp_path), lambda code, rule: code, "")
+        changes = GitSandboxService.process_directory(
+            str(tmp_path), lambda code, rule: code, ""
+        )
         assert changes == []
 
     def test_refactor_exception_skips_file(self, tmp_path):
@@ -278,7 +282,9 @@ class TestHealCodeEdgeCases:
         def bad_heal(broken, error, rule):
             raise RuntimeError("heal exploded")
 
-        changes = GitSandboxService.heal_code_with_error(str(tmp_path), error_output, bad_heal, "")
+        changes = GitSandboxService.heal_code_with_error(
+            str(tmp_path), error_output, bad_heal, ""
+        )
         assert changes == []
 
 
@@ -321,7 +327,9 @@ class TestFilesFromError:
     def test_deduplicates_files(self, tmp_path):
         (tmp_path / "a.py").write_text("x=1\n", encoding="utf-8")
         a_path = tmp_path / "a.py"
-        error_output = f'File "{a_path}", line 1\nNameError\nFile "{a_path}", line 2\nNameError'
+        error_output = (
+            f'File "{a_path}", line 1\nNameError\nFile "{a_path}", line 2\nNameError'
+        )
         files = GitSandboxService._files_from_error(str(tmp_path), error_output)
         assert files.count("a.py") == 1
 
@@ -331,7 +339,9 @@ class TestRun:
         def fake_subprocess_run(*args, **kwargs):
             raise subprocess.TimeoutExpired(cmd="git", timeout=5)
 
-        monkeypatch.setattr("app.services.git_sandbox.subprocess.run", fake_subprocess_run)
+        monkeypatch.setattr(
+            "app.services.git_sandbox.subprocess.run", fake_subprocess_run
+        )
 
         with pytest.raises(GitOperationError, match="timed out"):
             GitSandboxService._run(["git", "clone"], Path("."), timeout=5)
@@ -340,7 +350,9 @@ class TestRun:
         def fake_subprocess_run(*args, **kwargs):
             return SimpleNamespace(returncode=1, stdout="", stderr="fatal: not found")
 
-        monkeypatch.setattr("app.services.git_sandbox.subprocess.run", fake_subprocess_run)
+        monkeypatch.setattr(
+            "app.services.git_sandbox.subprocess.run", fake_subprocess_run
+        )
 
         with pytest.raises(GitOperationError, match="Command failed"):
             GitSandboxService._run(["git", "bad"], Path("."), timeout=5)
@@ -351,7 +363,9 @@ class TestRun:
         def fake_subprocess_run(*args, **kwargs):
             return expected
 
-        monkeypatch.setattr("app.services.git_sandbox.subprocess.run", fake_subprocess_run)
+        monkeypatch.setattr(
+            "app.services.git_sandbox.subprocess.run", fake_subprocess_run
+        )
 
         result = GitSandboxService._run(["git", "status"], Path("."), timeout=5)
         assert result is expected

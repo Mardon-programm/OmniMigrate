@@ -16,7 +16,9 @@ async def is_rate_limited(request: Request, key: str, limit: int, window: int) -
         redis = request.app.state.redis
         if redis is None:
             return False
-        bucket = f"ratelimit:{key}:{request.client.host if request.client else 'unknown'}"
+        bucket = (
+            f"ratelimit:{key}:{request.client.host if request.client else 'unknown'}"
+        )
         current = await redis.get(bucket)
         if current is None:
             await redis.setex(bucket, window, 1)
@@ -30,7 +32,9 @@ async def is_rate_limited(request: Request, key: str, limit: int, window: int) -
         return False
 
 
-async def is_org_rate_limited(request: Request, org_id: int, limit: int, window: int) -> bool:
+async def is_org_rate_limited(
+    request: Request, org_id: int, limit: int, window: int
+) -> bool:
     """Per-organization fixed-window rate limiter backed by Redis."""
     if not settings.rate_limit_enabled:
         return False

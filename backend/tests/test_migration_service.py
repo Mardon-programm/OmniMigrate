@@ -235,7 +235,9 @@ class TestContractGuards:
         assert "beta" in job.error_message
         assert job.self_heal_attempts == 1
 
-    async def test_rejects_unrequested_third_party_import(self, db_session, monkeypatch):
+    async def test_rejects_unrequested_third_party_import(
+        self, db_session, monkeypatch
+    ):
         monkeypatch.setattr(settings, "openai_api_key", "sk-test")
         monkeypatch.setattr(settings, "max_self_heal_attempts", 2)
         job = await _make_job(db_session, code=self.CONTRACT_SOURCE)

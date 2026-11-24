@@ -1,5 +1,5 @@
 from collections.abc import AsyncGenerator
-from typing import Union
+from typing import Any, Union
 
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import (
@@ -23,13 +23,42 @@ def _build_engine():
     if url.startswith("sqlite"):
         # SQLite (aiosqlite) uses NullPool and rejects pool sizing options.
         return create_async_engine(url, echo=settings.debug)
+
+    # For PostgreSQL with asyncpg, handle SSL properly
+    connect_args: dict[str, Any] = {
+        "server_settings": {
+            "tcp_keepalives_idle": "30",
+            "tcp_keepalives_interval": "10",
+            "tcp_keepalives_count": "5",
+        }
+    }
+
+    # Extract SSL mode from URL if present
+    if "sslmode=" in url:
+        import re
+
+        sslmode_match = re.search(r"sslmode=([^&]+)", url)
+        if sslmode_match:
+            sslmode = sslmode_match.group(1)
+            if sslmode in ("require", "verify-ca", "verify-full"):
+                connect_args["ssl"] = True
+            elif sslmode == "disable":
+                connect_args["ssl"] = False
+        # Remove sslmode from URL for asyncpg
+        url = re.sub(r"[?&]sslmode=[^&]*", "", url)
+        url = url.replace("?sslmode", "?").replace("&sslmode", "&")
+        if url.endswith("?"):
+            url = url[:-1]
+
     return create_async_engine(
         url,
         echo=settings.debug,
         pool_size=10,
         max_overflow=20,
         pool_pre_ping=True,
-        pool_recycle=1800,
+        pool_recycle=300,  # Recycle connections every 5 min (Neon timeout ~5 min)
+        pool_timeout=30,
+        connect_args=connect_args,
     )
 
 
@@ -80,8 +109,8 @@ async def close_redis() -> None:
     """Close the shared Redis client (used on application shutdown)."""
     global _redis_pool
     if _redis_pool is not None:
-        if hasattr(_redis_pool, "aclose"):
+        if isinstance(_redis_pool, Redis):
             await _redis_pool.aclose()
-        elif hasattr(_redis_pool, "close"):
+        elif isinstance(_redis_pool, UpstashRedis):
             await _redis_pool.close()
         _redis_pool = None

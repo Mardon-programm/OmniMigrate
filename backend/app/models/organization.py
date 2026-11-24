@@ -30,7 +30,9 @@ class Organization(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    slug: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    slug: Mapped[str] = mapped_column(
+        String(100), unique=True, index=True, nullable=False
+    )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -55,7 +57,9 @@ class Organization(Base):
 
 class OrganizationMember(Base):
     __tablename__ = "organization_members"
-    __table_args__ = (UniqueConstraint("organization_id", "user_id", name="uq_org_member"),)
+    __table_args__ = (
+        UniqueConstraint("organization_id", "user_id", name="uq_org_member"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     organization_id: Mapped[int] = mapped_column(
@@ -65,7 +69,9 @@ class OrganizationMember(Base):
         ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
     )
     role: Mapped[OrgRole] = mapped_column(
-        SAEnum(OrgRole, name="org_role", values_callable=lambda x: [e.value for e in x]),
+        SAEnum(
+            OrgRole, name="org_role", values_callable=lambda x: [e.value for e in x]
+        ),
         default=OrgRole.member,
         nullable=False,
     )

@@ -5,9 +5,10 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
-import time
 from pathlib import Path
+from typing import Optional
 
 import structlog
 
@@ -147,7 +148,9 @@ class GitSandboxService:
         workspace.mkdir(parents=True, exist_ok=True)
         project_dir = Path(tempfile.mkdtemp(prefix="omnimigrate_", dir=workspace))
 
-        def _build(branch: str | None, extra: list[str] | None, target: str) -> list[str]:
+        def _build(
+            branch: str | None, extra: list[str] | None, target: str
+        ) -> list[str]:
             cmd = ["git", "clone", "--depth", str(depth)]
             if branch:
                 cmd += ["--branch", branch]
@@ -168,7 +171,9 @@ class GitSandboxService:
             # checks out the repository's default branch instead of failing.
             if branch_label:
                 logger.warning(
-                    "Branch %s not found for %s, falling back to default branch", branch_label, url
+                    "Branch %s not found for %s, falling back to default branch",
+                    branch_label,
+                    url,
                 )
                 try:
                     cls._run(
@@ -199,9 +204,42 @@ class GitSandboxService:
 
     @classmethod
     def run_tests(cls, project_dir: str) -> TestRunResult:
-        """Run the repo's pytest suite in an isolated Docker container."""
+        """Run the repo's pytest suite in an isolated Docker container.
+
+        When sandboxing is disabled (local development / unit tests), run
+        pytest directly in a subprocess instead.  Production always uses the
+        container path below.
+        """
         project_path = Path(project_dir)
-        
+
+        if not _git_sandbox.enabled:
+            try:
+                proc = subprocess.run(
+                    [sys.executable, "-m", "pytest", "-x", "-q", "--tb=short"],
+                    cwd=project_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=settings.git_test_timeout_seconds,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise GitOperationError(
+                    f"pytest timed out after {settings.git_test_timeout_seconds}s"
+                ) from exc
+            except FileNotFoundError as exc:
+                raise GitOperationError(
+                    "pytest is not available in the sandbox"
+                ) from exc
+
+            # pytest exit code 5 means "no tests collected" — that is not a
+            # migration blocker for repos without a test suite.
+            return TestRunResult(
+                returncode=proc.returncode,
+                success=proc.returncode in (0, 5),
+                stdout=proc.stdout,
+                stderr=proc.stderr,
+                duration_seconds=0,
+            )
+
         # Build a test script that installs deps and runs pytest
         test_script = f"""
 import subprocess
@@ -234,7 +272,7 @@ print("__STDERR__", result.stderr)
         # Parse output
         stdout = result.stdout or ""
         stderr = result.stderr or ""
-        
+
         exit_code = 1
         for line in stdout.splitlines():
             if line.startswith("__EXIT_CODE__"):
@@ -307,28 +345,43 @@ print("__STDERR__", result.stderr)
     ) -> str:
         """Create a new branch, commit changes, and return the branch name."""
         repo = Path(project_dir)
-        
+
         # Create and checkout new branch
-        cls._run(["git", "checkout", "-b", branch_name], cwd=repo)
-        
+        cls._run(
+            ["git", "checkout", "-b", branch_name],
+            cwd=repo,
+            timeout=settings.git_test_timeout_seconds,
+        )
+
         # Stage all changes
         for change in changes:
             file_path = repo / change.rel_path
             file_path.write_text(change.after, encoding="utf-8")
-            cls._run(["git", "add", change.rel_path], cwd=repo)
-        
+            cls._run(
+                ["git", "add", change.rel_path],
+                cwd=repo,
+                timeout=settings.git_test_timeout_seconds,
+            )
+
         # Commit changes
-        cls._run(["git", "commit", "-m", commit_message], cwd=repo)
-        
+        cls._run(
+            ["git", "commit", "-m", commit_message],
+            cwd=repo,
+            timeout=settings.git_test_timeout_seconds,
+        )
+
         return branch_name
 
     @classmethod
-    def push_branch(cls, project_dir: str, branch_name: str, remote: str = "origin") -> bool:
+    def push_branch(
+        cls, project_dir: str, branch_name: str, remote: str = "origin"
+    ) -> bool:
         """Push branch to remote repository."""
         try:
             cls._run(
                 ["git", "push", "-u", remote, branch_name],
-                cwd=Path(project_dir)
+                cwd=Path(project_dir),
+                timeout=settings.git_test_timeout_seconds,
             )
             return True
         except GitOperationError:
@@ -346,11 +399,11 @@ print("__STDERR__", result.stderr)
         github_token: str,
     ) -> Optional[str]:
         """Create a GitHub Pull Request using GitHub API.
-        
+
         Returns the PR URL if successful, None otherwise.
         """
         import requests
-        
+
         # Get repo info from git remote
         try:
             remote_url = subprocess.run(
@@ -363,30 +416,30 @@ print("__STDERR__", result.stderr)
         except Exception:
             logger.warning("Failed to get remote URL")
             return None
-        
+
         # Extract owner/repo from URL
         # Format: https://github.com/owner/repo.git or git@github.com:owner/repo.git
-        repo_match = re.search(r'github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$', remote_url)
+        repo_match = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$", remote_url)
         if not repo_match:
             logger.warning("Could not parse GitHub repo from URL: %s", remote_url)
             return None
-        
+
         repo_full_name = repo_match.group(1)
         api_url = f"https://api.github.com/repos/{repo_full_name}/pulls"
-        
+
         headers = {
             "Authorization": f"Bearer {github_token}",
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
         }
-        
+
         payload = {
             "title": title,
             "head": branch_name,
             "base": base_branch,
             "body": body,
         }
-        
+
         try:
             response = requests.post(api_url, headers=headers, json=payload, timeout=30)
             if response.status_code == 201:
@@ -400,7 +453,7 @@ print("__STDERR__", result.stderr)
             logger.warning("Failed to create PR: %s", e)
             return None
 
-    # --- Branch introspection ---------------------------------------------
+        # --- Branch introspection ---------------------------------------------
         """Local branch names in the checkout (with an optional `origin/` prefix)."""
         try:
             proc = subprocess.run(
@@ -413,22 +466,6 @@ print("__STDERR__", result.stderr)
         except (OSError, subprocess.TimeoutExpired):
             return []
         return [b.strip() for b in (proc.stdout or "").splitlines() if b.strip()]
-
-    @staticmethod
-    def default_branch(project_dir: str) -> str:
-        """The currently checked-out branch (what `git clone` checked out by default)."""
-        try:
-            proc = subprocess.run(
-                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                cwd=project_dir,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            return "main"
-        branch = (proc.stdout or "").strip()
-        return branch or "main"
 
     # --- Directory refactoring --------------------------------------------
 
@@ -540,7 +577,9 @@ print("__STDERR__", result.stderr)
                 preexec_fn=GitSandboxService._sandbox_preexec if _IS_UNIX else None,
             )
         except subprocess.TimeoutExpired as exc:
-            raise GitOperationError(f"Command timed out after {timeout}s: {' '.join(cmd)}") from exc
+            raise GitOperationError(
+                f"Command timed out after {timeout}s: {' '.join(cmd)}"
+            ) from exc
         if proc.returncode != 0:
             raise GitOperationError(f"Command failed: {' '.join(cmd)}\n{proc.stderr}")
         return proc

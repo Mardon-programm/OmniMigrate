@@ -36,7 +36,9 @@ router = APIRouter()
 RESET_TOKEN_EXPIRE_MINUTES = 30
 
 
-@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED
+)
 async def register(payload: RegisterRequest, session: DbSession) -> TokenResponse:
     """Register a new user. Only admins can create engineer/admin accounts."""
     if payload.role in (UserRole.admin, UserRole.engineer):
@@ -69,7 +71,9 @@ async def register(payload: RegisterRequest, session: DbSession) -> TokenRespons
 
 
 def _otpauth_uri(email: str, secret: str) -> str:
-    return pyotp.totp.TOTP(secret).provisioning_uri(name=email, issuer_name="OmniMigrate")
+    return pyotp.totp.TOTP(secret).provisioning_uri(
+        name=email, issuer_name="OmniMigrate"
+    )
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -87,7 +91,9 @@ async def login(payload: LoginRequest, session: DbSession) -> TokenResponse:
             detail="Incorrect email or password.",
         )
     if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled."
+        )
 
     if user.mfa_enabled and user.mfa_secret:
         if not payload.mfa_code:
@@ -166,7 +172,9 @@ async def mfa_setup(user: CurrentUser, session: DbSession) -> MfaSetupResponse:
 
 
 @router.post("/mfa/enable", response_model=UserInfo)
-async def mfa_enable(payload: MfaEnableRequest, user: CurrentUser, session: DbSession) -> UserInfo:
+async def mfa_enable(
+    payload: MfaEnableRequest, user: CurrentUser, session: DbSession
+) -> UserInfo:
     """Confirm a TOTP code to activate MFA."""
     if not user.mfa_secret:
         raise HTTPException(
@@ -194,9 +202,15 @@ async def mfa_disable(
 ) -> UserInfo:
     """Disable MFA; requires password confirmation plus a valid current code."""
     if not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Incorrect password.")
-    if not user.mfa_secret or not pyotp.TOTP(user.mfa_secret).verify(payload.code, valid_window=1):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid MFA code.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Incorrect password."
+        )
+    if not user.mfa_secret or not pyotp.TOTP(user.mfa_secret).verify(
+        payload.code, valid_window=1
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid MFA code."
+        )
     user.mfa_enabled = False
     user.mfa_secret = None
     await session.commit()
@@ -225,7 +239,9 @@ async def logout(
                 exp_dt = datetime.fromtimestamp(exp, tz=UTC)
                 ttl = max(0, int((exp_dt - datetime.now(UTC)).total_seconds()))
                 redis = await get_redis()
-                await redis.setex(f"blocklist:refresh:{payload.refresh_token}", ttl, "1")
+                await redis.setex(
+                    f"blocklist:refresh:{payload.refresh_token}", ttl, "1"
+                )
         except Exception:
             pass
 
@@ -280,7 +296,9 @@ async def reset_password(payload: ResetPasswordRequest, session: DbSession) -> d
 
     user = await session.get(User, reset.user_id)
     if user is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User not found.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="User not found."
+        )
 
     user.hashed_password = hash_password(payload.new_password)
     reset.status = PasswordResetStatus.used

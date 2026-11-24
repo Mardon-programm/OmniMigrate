@@ -55,7 +55,9 @@ class _ModernizationTransformer(cst.CSTTransformer):
             return updated_node
         module_name = cst_helpers.get_full_name_for_node(updated_node.module) or ""
         if module_name.split(".")[0] in REMOVED_MODULES:
-            self.applied_rules.append(f"removed import from removed module '{module_name}'")
+            self.applied_rules.append(
+                f"removed import from removed module '{module_name}'"
+            )
             return cst.RemoveFromParent()
         return updated_node
 
@@ -79,7 +81,9 @@ class _ModernizationTransformer(cst.CSTTransformer):
                 func=func.with_changes(attr=cst.Name(value="now")),
                 args=[
                     cst.Arg(
-                        cst.Attribute(value=cst.Name(value="timezone"), attr=cst.Name(value="utc")),
+                        cst.Attribute(
+                            value=cst.Name(value="timezone"), attr=cst.Name(value="utc")
+                        ),
                         keyword=cst.Name(value="tz"),
                     )
                 ],
@@ -92,8 +96,12 @@ class _ModernizationTransformer(cst.CSTTransformer):
         value = updated_node.value
         if isinstance(value, cst.Name) and value.value in LEGACY_TYPING_NAMES:
             replacement = LEGACY_TYPING_NAMES[value.value]
-            self.applied_rules.append(f"typing.{value.value}[...] -> {replacement}[...]")
-            return updated_node.with_changes(value=value.with_changes(value=replacement))
+            self.applied_rules.append(
+                f"typing.{value.value}[...] -> {replacement}[...]"
+            )
+            return updated_node.with_changes(
+                value=value.with_changes(value=replacement)
+            )
         return updated_node
 
     def leave_Comparison(
@@ -138,8 +146,16 @@ def _ensure_timezone_import(source: str, needs_import: bool) -> str:
 # still get a best-effort modernization when no LLM is configured.
 _PY2_FALLBACK_RULES: list[tuple[re.Pattern, str, str]] = [
     (re.compile(r"\bxrange\("), "range(", "xrange -> range"),
-    (re.compile(r"\bprint\s+([^#\n]+)$", re.MULTILINE), r"print(\1)", "print statement -> print()"),
-    (re.compile(r"\b\.utcnow\(\)"), ".now(timezone.utc)", "datetime.utcnow -> now(timezone.utc)"),
+    (
+        re.compile(r"\bprint\s+([^#\n]+)$", re.MULTILINE),
+        r"print(\1)",
+        "print statement -> print()",
+    ),
+    (
+        re.compile(r"\b\.utcnow\(\)"),
+        ".now(timezone.utc)",
+        "datetime.utcnow -> now(timezone.utc)",
+    ),
 ]
 
 
@@ -184,9 +200,11 @@ def apply_modernization_rules(source: str) -> RuleEngineResult:
 # HYBRID TRANSFORM ENGINE - Clear separation of Deterministic vs LLM
 # =============================================================================
 
+
 @dataclasses.dataclass
 class TransformStage:
     """Represents a single transformation stage."""
+
     name: str
     description: str
     applied_rules: list[str]
@@ -196,6 +214,7 @@ class TransformStage:
 @dataclasses.dataclass
 class HybridTransformResult:
     """Result of hybrid transformation with clear stage separation."""
+
     stages: list[TransformStage]
     final_code: str
     deterministic_applied: list[str]
@@ -208,62 +227,70 @@ class HybridTransformResult:
 class HybridTransformEngine:
     """
     Hybrid Transform Engine - Clear separation of deterministic and LLM-based transformations.
-    
+
     Pipeline:
     1. Stage 1: Deterministic AST codemods (LibCST) - fast, deterministic, no API calls
     2. Stage 2: LLM-based transformations - semantic, context-aware
     3. Stage 3: Self-healing loop (sandbox verification + LLM fix)
     """
-    
+
     def __init__(self, rule_engine=None, llm_agent=None, sandbox=None):
         self.rule_engine = rule_engine
         self.llm_agent = llm_agent
         self.sandbox = sandbox
-    
+
     async def transform(
-        self, 
-        source_code: str, 
+        self,
+        source_code: str,
         context_rule: str,
         findings: list[dict],
-        max_self_heal_attempts: int = 3
+        max_self_heal_attempts: int = 3,
     ) -> HybridTransformResult:
         """
         Execute the full hybrid transformation pipeline.
-        
+
         Returns HybridTransformResult with clear stage separation.
         """
         stages = []
         current_code = source_code
-        
+
         # Stage 1: Deterministic AST transformations (no LLM needed)
         deterministic_result = apply_modernization_rules(current_code)
-        stages.append(TransformStage(
-            name="deterministic_ast",
-            description="Applied deterministic AST codemods (imports, syntax, typing)",
-            applied_rules=deterministic_result.applied_rules,
-            code=deterministic_result.code
-        ))
+        stages.append(
+            TransformStage(
+                name="deterministic_ast",
+                description="Applied deterministic AST codemods (imports, syntax, typing)",
+                applied_rules=deterministic_result.applied_rules,
+                code=deterministic_result.code,
+            )
+        )
         current_code = deterministic_result.code
-        
+
         # Stage 2: LLM-based semantic transformations (if available)
         llm_applied = []
         if self.llm_agent:
             try:
-                llm_output = await self.llm_agent.refactor(current_code, context_rule, findings or [])
+                llm_output = await self.llm_agent.refactor(
+                    current_code, context_rule, findings or []
+                )
                 llm_applied = ["LLM semantic refactoring applied"]
-                
-                stages.append(TransformStage(
-                    name="llm_semantic",
-                    description="LLM-based semantic refactoring with context awareness",
-                    applied_rules=llm_applied,
-                    code=llm_output
-                ))
+
+                stages.append(
+                    TransformStage(
+                        name="llm_semantic",
+                        description="LLM-based semantic refactoring with context awareness",
+                        applied_rules=llm_applied,
+                        code=llm_output,
+                    )
+                )
                 current_code = llm_output
                 llm_applied = ["LLM semantic refactoring applied"]
             except Exception as e:
-                logger.warning(f"LLM transformation failed: {e}, falling back to deterministic only")
+                logger.warning(
+                    f"LLM transformation failed: {e}, falling back to deterministic only"
+                )
                 llm_applied = []
-        
+
         # Stage 3: Self-healing loop with sandbox + output-contract verification
         self_heal_applied = []
         current_code_for_healing = current_code
@@ -282,7 +309,9 @@ class HybridTransformEngine:
             sandbox_ok = verification is None or verification.success
             if sandbox_ok and contract_report.ok:
                 if verification is None:
-                    self_heal_applied.append("Sandbox not available, skipping self-healing")
+                    self_heal_applied.append(
+                        "Sandbox not available, skipping self-healing"
+                    )
                 else:
                     self_heal_applied.append(
                         f"Sandbox verification passed on attempt {attempt + 1}"
@@ -328,42 +357,41 @@ class HybridTransformEngine:
 
         if not contract_report.ok:
             raise CodeContractError(contract_report)
-        
+
         # Final stage
-        stages.append(TransformStage(
-            name="self_healing",
-            description=f"Sandbox verification with self-healing ({len(self_heal_applied)} attempts)",
-            applied_rules=self_heal_applied,
-            code=current_code_for_healing
-        ))
-        
+        stages.append(
+            TransformStage(
+                name="self_healing",
+                description=f"Sandbox verification with self-healing ({len(self_heal_applied)} attempts)",
+                applied_rules=self_heal_applied,
+                code=current_code_for_healing,
+            )
+        )
+
         # Collect all applied rules
         deterministic_rules = []
         llm_rules = []
-        
+
         for stage in stages:
             if stage.name in ("deterministic_ast", "self_healing"):
                 deterministic_rules.extend(stage.applied_rules)
             elif stage.name == "llm_semantic":
                 llm_rules.extend(stage.applied_rules)
-        
+
         return HybridTransformResult(
             stages=stages,
             final_code=current_code_for_healing,
             deterministic_applied=deterministic_rules,
-            llm_applied=llm_rules
+            llm_applied=llm_rules,
         )
-    
+
     async def _attempt_self_heal(
-        self, 
-        broken_code: str, 
-        error: str, 
-        context_rule: str
+        self, broken_code: str, error: str, context_rule: str
     ) -> str:
         """Attempt to heal broken code using LLM."""
         if not self.llm_agent:
             return broken_code
-        
+
         try:
             healed = await self.llm_agent.self_heal(broken_code, error, context_rule)
             return healed

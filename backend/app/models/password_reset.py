@@ -19,7 +19,9 @@ class PasswordResetToken(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
-    token_hash: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(
+        String(255), unique=True, nullable=False, index=True
+    )
     status: Mapped[PasswordResetStatus] = mapped_column(
         SAEnum(
             PasswordResetStatus,
@@ -29,7 +31,9 @@ class PasswordResetToken(Base):
         default=PasswordResetStatus.pending,
         nullable=False,
     )
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )

@@ -31,13 +31,9 @@ _STDLIB_IMPORTS = frozenset(sys.stdlib_module_names) | {"__future__"}
 _TOP_LEVEL_DEF_RE = re.compile(
     r"^(?:async\s+def|def|class)\s+([A-Za-z_]\w*)", re.MULTILINE
 )
-_TOP_LEVEL_ASSIGN_RE = re.compile(
-    r"^([A-Za-z_]\w*)\s*(?::[^=\n]+)?=", re.MULTILINE
-)
+_TOP_LEVEL_ASSIGN_RE = re.compile(r"^([A-Za-z_]\w*)\s*(?::[^=\n]+)?=", re.MULTILINE)
 _IMPORT_RE = re.compile(r"^\s*import\s+([A-Za-z_][\w.]*)", re.MULTILINE)
-_FROM_IMPORT_RE = re.compile(
-    r"^\s*from\s+([A-Za-z_][\w.]*)\s+import\b", re.MULTILINE
-)
+_FROM_IMPORT_RE = re.compile(r"^\s*from\s+([A-Za-z_][\w.]*)\s+import\b", re.MULTILINE)
 
 
 class CodeContractError(RuntimeError):
@@ -362,7 +358,9 @@ def validate_output(
         )
 
     allowed_roots = _STDLIB_IMPORTS | contract.import_roots
-    allowed_roots = allowed_roots | {name.split(".")[0] for name in allowed_extra_imports}
+    allowed_roots = allowed_roots | {
+        name.split(".")[0] for name in allowed_extra_imports
+    }
     added_imports = frozenset(output_roots - allowed_roots)
     if added_imports:
         violations.append(

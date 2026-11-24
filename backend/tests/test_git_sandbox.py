@@ -59,7 +59,9 @@ def git_repo():
         _git(repo, "init", "-b", "main")
         _git(repo, "config", "user.email", "t@t.t")
         _git(repo, "config", "user.name", "T")
-        (repo / "legacy.py").write_text("def get(name):\n    return name\n", encoding="utf-8")
+        (repo / "legacy.py").write_text(
+            "def get(name):\n    return name\n", encoding="utf-8"
+        )
         _git(repo, "add", ".")
         _git(repo, "commit", "-m", "init")
         yield repo
@@ -135,7 +137,9 @@ class TestHealCodeWithError:
         assert files == ["legacy.py"]
 
     def test_heals_implicated_file(self, git_repo):
-        (git_repo / "legacy.py").write_text("for i in xrange(3):\n    pass\n", encoding="utf-8")
+        (git_repo / "legacy.py").write_text(
+            "for i in xrange(3):\n    pass\n", encoding="utf-8"
+        )
         error = (
             f'File "{git_repo}/legacy.py", line 1, in <module>\n'
             "NameError: name 'xrange' is not defined"

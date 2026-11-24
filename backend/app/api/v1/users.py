@@ -85,12 +85,16 @@ async def update_user(
     return _to_read(user)
 
 
-@router.post("/{user_id}/password", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@router.post(
+    "/{user_id}/password", status_code=status.HTTP_204_NO_CONTENT, response_model=None
+)
 async def change_password(
     user_id: int, payload: PasswordChange, session: DbSession, current: CurrentUser
 ) -> None:
     if current.id != user_id:
-        raise HTTPException(status_code=403, detail="You can only change your own password.")
+        raise HTTPException(
+            status_code=403, detail="You can only change your own password."
+        )
     if not verify_password(payload.current_password, current.hashed_password):
         raise HTTPException(status_code=400, detail="Current password is incorrect.")
     current.hashed_password = hash_password(payload.new_password)

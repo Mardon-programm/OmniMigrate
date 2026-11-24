@@ -14,6 +14,7 @@ import { ForgotPassword } from "@/pages/ForgotPassword";
 import { JobDetails } from "@/pages/JobDetails";
 import { Jobs } from "@/pages/Jobs";
 import { Landing } from "@/pages/Landing";
+import { Privacy, Terms } from "@/pages/Legal";
 import { Login } from "@/pages/Login";
 import { NotFound } from "@/pages/NotFound";
 import { Organizations } from "@/pages/Organizations";
@@ -48,6 +49,10 @@ function Shell() {
 
             {/* Demo page - public */}
             <Route path="/demo" element={<Demo />} />
+
+            {/* Legal pages linked from the landing footer */}
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/terms" element={<Terms />} />
 
             {/* Landing page for unauthenticated users */}
             <Route

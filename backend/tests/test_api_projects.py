@@ -49,7 +49,9 @@ class TestProjects:
         owner = await make_user(db_session, email="owner4@example.com")
         other = await make_user(db_session, email="other@example.com")
         created = await _create_project(client, auth_headers(owner.id))
-        resp = await client.get(f"/api/v1/projects/{created['id']}", headers=auth_headers(other.id))
+        resp = await client.get(
+            f"/api/v1/projects/{created['id']}", headers=auth_headers(other.id)
+        )
         assert resp.status_code == 403
 
     async def test_get_missing_project(self, client, db_session):
@@ -88,7 +90,9 @@ class TestProjects:
 
     async def test_delete_as_admin(self, client, db_session):
         owner = await make_user(db_session, email="owner9@example.com")
-        admin = await make_user(db_session, email="admin9@example.com", role=UserRole.admin)
+        admin = await make_user(
+            db_session, email="admin9@example.com", role=UserRole.admin
+        )
         created = await _create_project(client, auth_headers(owner.id))
         resp = await client.delete(
             f"/api/v1/projects/{created['id']}",
@@ -97,7 +101,9 @@ class TestProjects:
         assert resp.status_code == 204
 
     async def test_delete_missing_project(self, client, db_session):
-        admin = await make_user(db_session, email="admin10@example.com", role=UserRole.admin)
+        admin = await make_user(
+            db_session, email="admin10@example.com", role=UserRole.admin
+        )
         resp = await client.delete(
             "/api/v1/projects/9999",
             headers=auth_headers(admin.id, UserRole.admin.value),

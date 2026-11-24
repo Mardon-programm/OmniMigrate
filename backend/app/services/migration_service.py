@@ -18,7 +18,7 @@ from app.services.diff_utils import diff_stats, generate_diff
 from app.services.llm_agent import LLMAgent
 from app.services.observability import record_sandbox_result
 from app.services.rule_engine import apply_modernization_rules
-from app.services.sandbox import SandboxFactory, SandboxConfig
+from app.services.sandbox import SandboxConfig
 from app.services.dependencies import DynamicSandbox
 
 logger = structlog.get_logger(__name__)
@@ -43,7 +43,7 @@ class MigrationEngine:
         self.session = session
         self.redis = redis
         self.llm = llm or LLMAgent()
-        
+
         # Use DynamicSandbox with Docker for production security
         sandbox_config = SandboxConfig(
             timeout_seconds=settings.sandbox_timeout_seconds,
@@ -104,14 +104,18 @@ class MigrationEngine:
             return
 
         try:
-            await self._push_state(job, JobStatus.parsing.value, 5, "Parsing source code via AST")
+            await self._push_state(
+                job, JobStatus.parsing.value, 5, "Parsing source code via AST"
+            )
             await self._persist(job)
 
             # 1. AST analysis.
             parse = analyze_source("source.py", job.input_code)
             findings = parse.findings
             if parse.parse_error:
-                logger.warning("AST parse issue for job %s: %s", job_id, parse.parse_error)
+                logger.warning(
+                    "AST parse issue for job %s: %s", job_id, parse.parse_error
+                )
             if parse.python_version_suggestion:
                 findings.append(
                     {
@@ -125,14 +129,19 @@ class MigrationEngine:
 
             job.findings = findings
             await self._push_state(
-                job, JobStatus.analyzing.value, 25, "Analyzing modernization opportunities"
+                job,
+                JobStatus.analyzing.value,
+                25,
+                "Analyzing modernization opportunities",
             )
             await self._persist(job)
 
             # 2. Refactoring: LLM provider, or deterministic local rule engine
             #    as a no-key fallback so the pipeline stays fully functional.
             context_rule = job.context_rule or DEFAULT_CONTEXT_RULE
-            use_local_rules = not settings.openai_api_key and settings.llm_fallback_to_rules
+            use_local_rules = (
+                not settings.openai_api_key and settings.llm_fallback_to_rules
+            )
             provider = "local-rule-engine" if use_local_rules else "llm"
             await self._push_state(
                 job,
@@ -146,7 +155,9 @@ class MigrationEngine:
                 result = apply_modernization_rules(job.input_code)
                 output_code = result.code
             else:
-                output_code = await self.llm.refactor(job.input_code, context_rule, findings)
+                output_code = await self.llm.refactor(
+                    job.input_code, context_rule, findings
+                )
             job.output_code = output_code
 
             # Enforce the anti-shrinkage contract before and during healing.
@@ -195,7 +206,9 @@ class MigrationEngine:
                 if use_local_rules:
                     healed = apply_modernization_rules(output_code).code
                 else:
-                    healed = await self.llm.self_heal(output_code, error_text, context_rule)
+                    healed = await self.llm.self_heal(
+                        output_code, error_text, context_rule
+                    )
                 job.output_code = healed
                 output_code = healed
                 await self._persist(job)

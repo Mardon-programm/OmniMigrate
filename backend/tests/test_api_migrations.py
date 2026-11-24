@@ -57,7 +57,9 @@ class TestPreviewDiff:
 class TestEngineHealth:
     async def test_health(self, client, db_session):
         user = await make_user(db_session, email="mig5@example.com")
-        resp = await client.get("/api/v1/migrations/health", headers=auth_headers(user.id))
+        resp = await client.get(
+            "/api/v1/migrations/health", headers=auth_headers(user.id)
+        )
         assert resp.status_code == 200
         assert resp.json()["status"] == "ready"
         assert "sandbox-verification" in resp.json()["capabilities"]

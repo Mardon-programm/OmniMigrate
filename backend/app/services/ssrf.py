@@ -30,7 +30,9 @@ def validate_url_for_clone(url: str) -> str:
     try:
         infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
     except socket.gaierror as exc:
-        raise GitOperationError(f"DNS resolution failed for '{hostname}': {exc}") from exc
+        raise GitOperationError(
+            f"DNS resolution failed for '{hostname}': {exc}"
+        ) from exc
     if not infos:
         raise GitOperationError(f"DNS resolution returned no results for '{hostname}'")
     seen = set()

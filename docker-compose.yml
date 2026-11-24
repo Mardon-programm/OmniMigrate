@@ -25,13 +25,11 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DATABASE_URL: "postgresql+asyncpg://neondb_owner:npg_4gGM3WHNRXPQ@ep-billowing-term-b5v1z7fz-pooler.c-7.us-east-2.aws.neon.tech/neondb?ssl=require"
       REDIS_URL: redis://redis:6379/0
-      OPENAI_MODEL: "gemini-flash-latest"
     depends_on:
       redis:
         condition: service_healthy
-    command: sh -c 'echo "DATABASE_URL=$DATABASE_URL" && alembic upgrade heads && uvicorn app.main:app --host 0.0.0.0 --port 8003 --workers 2'
+    command: sh -c 'alembic upgrade heads && uvicorn app.main:app --host 0.0.0.0 --port 8003 --workers 2'
     ports:
       - "8003:8003"
     volumes:
@@ -47,9 +45,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DATABASE_URL: "postgresql+asyncpg://neondb_owner:npg_4gGM3WHNRXPQ@ep-billowing-term-b5v1z7fz-pooler.c-7.us-east-2.aws.neon.tech/neondb?ssl=require"
       REDIS_URL: redis://redis:6379/0
-      OPENAI_MODEL: "gemini-flash-latest"
     depends_on:
       redis:
         condition: service_healthy
